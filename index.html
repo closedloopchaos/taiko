@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taiko Task Manager</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS for animations and theming -->
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #0f172a; /* Fallback background */
+        }
+        .pulse-border-high { animation: pulse-border-high 1.2s infinite; }
+        @keyframes pulse-border-high { 
+            0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.9); } 
+            50% { box-shadow: 0 0 0 6px rgba(248, 113, 113, 0); } 
+        }
+        .pulse-border-medium { animation: pulse-border-medium 1.8s infinite; }
+        @keyframes pulse-border-medium { 
+            0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8); } 
+            50% { box-shadow: 0 0 0 5px rgba(251, 191, 36, 0); } 
+        }
+        .pulse-border-low { animation: pulse-border-low 2.5s infinite; }
+        @keyframes pulse-border-low { 
+            0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); } 
+            50% { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0); } 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel Standalone for JSX Transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Main Application Logic -->
+    <script type="text/babel">
+
+    const { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } = React;
+
+    // --- Context for State Management ---
+    const AppContext = createContext(null);
+
+    // --- Provider Component ---
+    const AppProvider = ({ children }) => {
+        // --- Core State ---
+        const [tasks, setTasks] = useState([]);
+        const [settings, setSettings] = useState({ 
+            soundAlerts: true, 
+            confirmOnDelete: true, 
+            autoCollapse: true,
+            verticalLayout: false 
+        });
+
+        // --- Modal-related State ---
+        const [taskToClose, setTaskToClose] = useState(null);
+        const [taskToUnarchive, setTaskToUnarchive] = useState(null);
+        const [taskToDelete, setTaskToDelete] = useState(null);
+        
+        const appId = 'taiko-app-local';
+
+        // --- Local Storage Persistence ---
+        useEffect(() => {
+            const savedTasks = localStorage.getItem(`${appId}-tasks`);
+            if (savedTasks) {
+                try {
+                    setTasks(JSON.parse(savedTasks));
+                } catch {
+                    console.error("Could not parse saved tasks.");
+                }
+            }
+            const savedSettings = localStorage.getItem(`${appId}-settings`);
+            if (savedSettings) {
+                try { 
+                    const parsed = JSON.parse(savedSettings);
+                    setSettings(prev => ({...prev, ...parsed})); 
+                } catch { console.error("Could not parse saved settings."); }
+            }
+        }, []);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-tasks`, JSON.stringify(tasks));
+        }, [tasks]);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-settings`, JSON.stringify(settings));
+        }, [settings]);
+
+        // --- Notification Permission ---
+        useEffect(() => {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }, []);
+
+        // --- Core Data Actions ---
+        const updateTask = useCallback((id, updatedFields) => {
+            setTasks(prevTasks => prevTasks.map(task => 
+                task.id === id ? { ...task, ...updatedFields, timestamp: new Date().toISOString() } : task
+            ));
+        }, []);
+        
+        const addTask = useCallback((priority) => {
+            const newTask = {
+                id: crypto.randomUUID(),
+                title: 'New Task', 
+                checklist: [{ id: crypto.randomUUID(), text: 'First item', completed: false }],
+                priority, 
+                status: 'To Do', 
+                archived: false, 
+                rank: tasks.filter(t => t.priority === priority && !t.archived).length,
+                timestamp: new Date().toISOString(), 
+                startedAt: null, 
+                totalElapsedTimeInSeconds: 0,
+                reminderAt: null, 
+                reminderFired: false, 
+                tags: []
+            };
+            setTasks(prevTasks => [...prevTasks, newTask]);
+        }, [tasks]);
+
+        const deleteTask = useCallback((id) => {
+            setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
+        }, []);
+
+        const archiveTask = useCallback((id, isArchived) => {
+            setTasks(prevTasks => prevTasks.map(task => {
+                if (task.id === id) {
+                    const updates = { archived: isArchived };
+                    if (isArchived && task.status === 'In Progress' && task.startedAt) {
+                        updates.totalElapsedTimeInSeconds = (task.totalElapsedTimeInSeconds || 0) + ((new Date().getTime() - new Date(task.startedAt).getTime()) / 1000);
+                        updates.startedAt = null;
+                    }
+                    return { ...task, ...updates };
+                }
+                return task;
+            }));
+        }, []);
+        
+        const allTags = useMemo(() => {
+            const tags = new Set();
+            tasks.forEach(task => {
+                if (task.tags) {
+                    task.tags.forEach(tag => tags.add(tag));
+                }
+            });
+            return Array.from(tags).sort();
+        }, [tasks]);
+
+        const contextValue = useMemo(() => ({
+            tasks, updateTask, addTask, deleteTask, archiveTask,
+            settings, setSettings, allTags,
+            taskToClose, setTaskToClose,
+            taskToUnarchive, setTaskToUnarchive,
+            taskToDelete, setTaskToDelete,
+        }), [tasks, settings, allTags, taskToClose, taskToUnarchive, taskToDelete]);
+        
+        return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
+    };
+
+    // --- Custom Hook to consume context ---
+    const useAppContext = () => {
+        const context = useContext(AppContext);
+        if (context === null) throw new Error("useAppContext must be used within an AppProvider");
+        return context;
+    }
+
+    // --- Helper Hooks ---
+    const usePrevious = (value) => { const ref = useRef(); useEffect(() => { ref.current = value; }); return ref.current; };
+    const useNow = (updateInterval = 1000) => { const [now, setNow] = useState(new Date()); useEffect(() => { const timerId = setInterval(() => setNow(new Date()), updateInterval); return () => clearInterval(timerId); }, [updateInterval]); return now; };
+
+    // --- Icon Components (Memoized) ---
+    const ArchiveIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>);
+    const RestoreIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15l4 4 4-4M4 4h16v4H4z" /></svg>);
+    const DeleteIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>);
+    const BellIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>);
+    const ChevronDownIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>);
+    const SettingsIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.096 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>);
+    const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
+
+    // --- Time & Countdown Components (Memoized) ---
+    const LiveClock = React.memo(({ timezone, onTimezoneChange }) => {
+        const time = useNow();
+        const dateOptions = useMemo(() => ({ weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }), []);
+        
+        const timeZone = useMemo(() => ({'EST': 'America/New_York', 'PST': 'America/Los_Angeles', 'UTC': 'UTC'}[timezone]), [timezone]);
+        
+        const formattedTime = time.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const formattedDate = time.toLocaleDateString('en-US', { ...dateOptions, timeZone });
+
+        return (
+            <div className="flex flex-col items-end text-slate-300">
+                <div className="flex items-baseline space-x-2">
+                    <div className="text-2xl font-mono tracking-wider">{formattedTime}</div>
+                    <button onClick={onTimezoneChange} className="text-xs font-semibold bg-slate-700/50 px-2 py-0.5 rounded-md hover:bg-slate-700 transition-colors" title="Change Timezone">
+                        {timezone}
+                    </button>
+                </div>
+                <div className="text-xs font-sans uppercase tracking-widest text-slate-400">{formattedDate}</div>
+            </div>
+        );
+    });
+
+    const TimeElapsed = React.memo(({ startTime, totalElapsedSeconds }) => {
+        const [elapsed, setElapsed] = useState('00:00:00');
+        const animationFrameRef = useRef();
+        const formatTime = useCallback((s) => new Date(s * 1000).toISOString().substr(11, 8), []);
+
+        useEffect(() => {
+            let isMounted = true;
+            const animate = () => {
+                if (!startTime || !isMounted) return;
+                const currentSessionSeconds = (new Date().getTime() - new Date(startTime).getTime()) / 1000;
+                setElapsed(formatTime((totalElapsedSeconds || 0) + currentSessionSeconds));
+                animationFrameRef.current = requestAnimationFrame(animate);
+            };
+            if (startTime) animate();
+            else setElapsed(formatTime(totalElapsedSeconds || 0));
+            return () => { isMounted = false; cancelAnimationFrame(animationFrameRef.current); };
+        }, [startTime, totalElapsedSeconds, formatTime]);
+        
+        return <span className="text-xs font-mono bg-slate-700/50 text-amber-300 px-2 py-1 rounded">{elapsed}</span>;
+    });
+
+    const ReminderCountdown = React.memo(({ reminderAt }) => {
+        const [countdown, setCountdown] = useState('');
+        const formatCountdown = useCallback((ms) => {
+            if (ms <= 0) return 'Due!';
+            return new Date(ms).toISOString().substr(11, 8);
+        }, []);
+
+        useEffect(() => {
+            if (!reminderAt) return;
+            const timer = setInterval(() => setCountdown(formatCountdown(new Date(reminderAt).getTime() - new Date().getTime())), 1000);
+            return () => clearInterval(timer);
+        }, [reminderAt, formatCountdown]);
+
+        return <div className="text-xs text-cyan-300 font-mono mt-1">Countdown: {countdown}</div>;
+    });
+
+    // --- UI Components ---
+    const ChecklistItem = React.memo(({ item, onUpdate, onDelete }) => (
+        <li className="flex items-center space-x-2 group">
+            <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
+            <input type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} className={`flex-grow bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} />
+            <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </li>
+    ));
+
+    const PriorityIndicator = React.memo(({ priority, onClick }) => {
+        const priorityStyles = { low: { icon: '▲', color: 'text-sky-400', label: 'Low' }, medium: { icon: '▲▲', color: 'text-yellow-400', label: 'Medium' }, high: { icon: '▲▲▲', color: 'text-red-400', label: 'High' } };
+        const current = priorityStyles[priority] || priorityStyles.low;
+        return <button onClick={onClick} className={`flex items-center space-x-1 text-xs font-semibold ${current.color} hover:opacity-75 transition-opacity`} title={`Priority: ${current.label}. Click to change.`}><span>{current.icon}</span></button>;
+    });
+
+    const Tooltip = ({ text, children }) => (
+        <div className="relative group flex items-center">
+            {children}
+            <div className="absolute bottom-full mb-2 w-max bg-slate-800 text-white text-xs rounded-md py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none transform -translate-x-1/2 left-1/2 z-30">{text}</div>
+        </div>
+    );
+
+    // --- Task Card Component ---
+    const TaskCard = ({ task }) => {
+        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete } = useAppContext();
+        const now = useNow();
+
+        const [isEditingTitle, setIsEditingTitle] = useState(false);
+        const [title, setTitle] = useState(task.title);
+        const [isSettingReminder, setIsSettingReminder] = useState(false);
+        const [reminderInput, setReminderInput] = useState('');
+        const [checklist, setChecklist] = useState(task.checklist || []);
+        const [newTag, setNewTag] = useState('');
+        
+        useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
+        useEffect(() => { setTitle(task.title); }, [task.title]);
+        
+        const handleDeleteRequest = useCallback(() => {
+            if (settings.confirmOnDelete) {
+                setTaskToDelete(task.id);
+            } else {
+                deleteTask(task.id);
+            }
+        }, [task.id, settings.confirmOnDelete, deleteTask, setTaskToDelete]);
+
+        const handleUpdateChecklist = useCallback((updatedList) => {
+            const completedItems = updatedList.filter(item => item.completed).length;
+            let newStatus = task.status;
+
+            if (updatedList.length > 0 && completedItems === updatedList.length) newStatus = 'Done';
+            else if (task.status === 'To Do' && completedItems > 0) newStatus = 'In Progress';
+            else if (completedItems < updatedList.length && task.status === 'Done') newStatus = 'In Progress';
+            else if (completedItems === 0 && updatedList.length > 0 && task.status === 'In Progress') newStatus = 'To Do';
+            
+            let updates = { checklist: updatedList };
+            
+            if (newStatus !== task.status) {
+                updates.status = newStatus;
+                if (newStatus === 'In Progress' && ['To Do', 'On Hold', 'Done'].includes(task.status)) {
+                    updates.startedAt = new Date().toISOString();
+                }
+                if (task.status === 'In Progress' && ['Done', 'On Hold', 'To Do'].includes(newStatus) && task.startedAt) {
+                    updates.totalElapsedTimeInSeconds = (task.totalElapsedTimeInSeconds || 0) + ((new Date().getTime() - new Date(task.startedAt).getTime()) / 1000);
+                    updates.startedAt = null;
+                }
+                if (newStatus === 'To Do' && task.totalElapsedTimeInSeconds > 0) updates.totalElapsedTimeInSeconds = 0;
+            }
+            updateTask(task.id, updates);
+        }, [task, updateTask]);
+        
+        const handleItemUpdate = (id, values) => handleUpdateChecklist(checklist.map(i => i.id === id ? { ...i, ...values } : i));
+        const handleItemDelete = (id) => handleUpdateChecklist(checklist.filter(i => i.id !== id));
+        const handleAddItem = () => handleUpdateChecklist([...checklist, { id: crypto.randomUUID(), text: 'New item', completed: false }]);
+        const handleTitleBlur = () => { setIsEditingTitle(false); if (title !== task.title) updateTask(task.id, { title }); };
+        
+        const handleAddTag = () => {
+            const currentTags = task.tags || [];
+            if (newTag && !currentTags.includes(newTag)) {
+                const newTags = [...currentTags, newTag.trim()];
+                updateTask(task.id, { tags: newTags });
+                setNewTag('');
+            }
+        };
+
+        const handleRemoveTag = (tagToRemove) => {
+            const newTags = (task.tags || []).filter(tag => tag !== tagToRemove);
+            updateTask(task.id, { tags: newTags });
+        };
+
+        const handleSetReminder = useCallback(() => {
+            if (!reminderInput) return;
+            const [h, m] = reminderInput.split(':');
+            const reminderDate = new Date(); reminderDate.setHours(h, m, 0, 0);
+            updateTask(task.id, { reminderAt: reminderDate.toISOString(), reminderFired: false });
+            setIsSettingReminder(false);
+        }, [reminderInput, task.id, updateTask]);
+
+        const handlePriorityChange = () => {
+            const priorities = ['low', 'medium', 'high'];
+            updateTask(task.id, { priority: priorities[(priorities.indexOf(task.priority) + 1) % priorities.length] });
+        };
+        
+        const handlePauseTask = () => {
+            if (!task.startedAt) return;
+            const elapsed = (new Date().getTime() - new Date(task.startedAt).getTime()) / 1000;
+            updateTask(task.id, { status: 'On Hold', totalElapsedTimeInSeconds: (task.totalElapsedTimeInSeconds || 0) + elapsed, startedAt: null });
+        };
+
+        const statusActions = {
+            'To Do': () => updateTask(task.id, { status: 'In Progress', startedAt: new Date().toISOString() }),
+            'In Progress': handlePauseTask,
+            'On Hold': () => updateTask(task.id, { status: 'In Progress', startedAt: new Date().toISOString() }),
+        };
+
+        const statusColors = { 'To Do': 'bg-sky-500', 'In Progress': 'bg-yellow-500', 'On Hold': 'bg-slate-500', 'Done': 'bg-green-500' };
+        const reminderIsDue = task.reminderAt && !task.reminderFired && now > new Date(task.reminderAt);
+        const pulseClass = reminderIsDue ? `pulse-border-${task.priority || 'low'}` : '';
+
+        return (
+            <div className={`bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
+                <div className={`w-full py-1 rounded-t-lg ${statusColors[task.status]} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
+                <div className="p-3">
+                    <div className="flex justify-between items-start mb-2">
+                        {isEditingTitle ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="w-full bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" /> : <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer">{task.title}</h3>}
+                        {!task.archived && <PriorityIndicator priority={task.priority} onClick={handlePriorityChange} />}
+                    </div>
+
+                    <ul className="space-y-1 my-2">{checklist.map(item => <ChecklistItem key={item.id} item={item} onUpdate={handleItemUpdate} onDelete={handleItemDelete} />)}</ul>
+                    <button onClick={handleAddItem} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50">+ Add item</button>
+
+                    {/* --- Tagging UI --- */}
+                    <div className="mt-3 pt-2 border-t border-slate-700/50">
+                        <div className="flex flex-wrap gap-2">
+                            {(task.tags || []).map(tag => (
+                                <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
+                                    {tag}
+                                    <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
+                                </span>
+                            ))}
+                        </div>
+                        <div className="flex mt-2">
+                            <input
+                                list="tag-suggestions"
+                                type="text"
+                                value={newTag}
+                                onChange={(e) => setNewTag(e.target.value)}
+                                onKeyDown={(e) => {if (e.key === 'Enter') handleAddTag()}}
+                                placeholder="Add a tag..."
+                                className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow"
+                            />
+                            <datalist id="tag-suggestions">
+                                {allTags.map(tag => <option key={tag} value={tag} />)}
+                            </datalist>
+                            <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 rounded-md hover:bg-sky-500">Add</button>
+                        </div>
+                    </div>
+
+                    {isSettingReminder && !task.archived && <div className="mt-3 flex items-center space-x-2"><input type="time" onChange={e => setReminderInput(e.target.value)} autoFocus className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 w-full"/><button onClick={handleSetReminder} className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button></div>}
+                    {task.reminderAt && !isSettingReminder && <div className="mt-2 text-xs text-sky-300 flex justify-between items-center"><span>Reminder: {new Date(task.reminderAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span><button onClick={() => updateTask(task.id, { reminderAt: null })} className="text-red-400 hover:text-red-300 text-xs">(clear)</button></div>}
+                    {task.reminderAt && !isSettingReminder && !reminderIsDue && <ReminderCountdown reminderAt={task.reminderAt} />}
+
+                    <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between items-center">
+                        <div className="flex items-center space-x-2">
+                            {!task.archived && task.status === 'To Do' && !task.totalElapsedTimeInSeconds && <button onClick={statusActions['To Do']} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>}
+                            {(task.status !== 'To Do' || task.totalElapsedTimeInSeconds > 0) && <TimeElapsed startTime={task.startedAt} totalElapsedSeconds={task.totalElapsedTimeInSeconds || 0} />}
+                            {!task.archived && task.status === 'In Progress' && task.startedAt && <button onClick={statusActions['In Progress']} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>}
+                            {!task.archived && (task.status === 'On Hold' || (task.status === 'To Do' && task.totalElapsedTimeInSeconds > 0)) && <button onClick={statusActions['On Hold']} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Tooltip text="Set Reminder"><button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.archived} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button></Tooltip>
+                            <Tooltip text={task.archived ? "Restore" : "Archive"}><button onClick={() => archiveTask(task.id, !task.archived)} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700">{task.archived ? <RestoreIcon /> : <ArchiveIcon />}</button></Tooltip>
+                            <Tooltip text="Delete Permanently"><button onClick={handleDeleteRequest} className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button></Tooltip>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    const MemoizedTaskCard = React.memo(TaskCard);
+
+    // --- Main Presentation Component ---
+    const App = () => {
+        const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask } = useAppContext();
+        const playSound = useCallback(() => { if (settings.soundAlerts && typeof Tone !== 'undefined') new Tone.Synth().toDestination().triggerAttackRelease("C5", "8n"); }, [settings.soundAlerts]);
+
+        const [isFocusMode, setIsFocusMode] = useState(false);
+        const [showArchived, setShowArchived] = useState(false);
+        const [collapsedColumns, setCollapsedColumns] = useState({ high: false, medium: false, low: false });
+        const [showSettings, setShowSettings] = useState(false);
+        const [clockTimezone, setClockTimezone] = useState('EST');
+        const [activeTags, setActiveTags] = useState([]);
+        const [tagSwimlanes, setTagSwimlanes] = useState([]);
+        const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
+
+        const currentTasks = useMemo(() => showArchived ? tasks.filter(t => t.archived) : tasks.filter(t => !t.archived), [tasks, showArchived]);
+        
+        const prevTasks = usePrevious(currentTasks);
+
+        useEffect(() => {
+            if (!prevTasks || !currentTasks) return;
+            currentTasks.forEach(task => {
+                const prevTask = prevTasks.find(pt => pt.id === task.id);
+                if (prevTask && prevTask.status !== 'Done' && task.status === 'Done' && !task.archived) {
+                    setTaskToClose(task); playSound();
+                }
+            });
+        }, [currentTasks, prevTasks, playSound, setTaskToClose]);
+
+        const handleConfirmDelete = useCallback(() => {
+            if (!taskToDelete) return;
+            deleteTask(taskToDelete);
+            setTaskToDelete(null);
+        }, [taskToDelete, deleteTask]);
+        
+        const handleAddTask = (priority) => { addTask(priority); setCollapsedColumns(p => ({ ...p, [priority]: false })); };
+        const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
+        const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
+        const handleTimezoneChange = () => setClockTimezone(p => ['EST', 'PST', 'UTC'][(['EST', 'PST', 'UTC'].indexOf(p) + 1) % 3]);
+        
+        const handleFocusClick = () => {
+            const newFocusState = !isFocusMode;
+            if (newFocusState) setShowArchived(false);
+            setIsFocusMode(newFocusState);
+        };
+
+        const handleArchiveClick = () => {
+            const newArchiveState = !showArchived;
+            if (newArchiveState) setIsFocusMode(false);
+            setShowArchived(newArchiveState);
+        };
+        
+        const handleTagFilterClick = (tag) => {
+            setActiveTags(prev => {
+                if (prev.includes(tag)) {
+                    return prev.filter(t => t !== tag);
+                } else {
+                    return [...prev, tag];
+                }
+            });
+        };
+
+        const clearTagFilter = () => setActiveTags([]);
+
+        const filteredTasks = useMemo(() => {
+            if (activeTags.length === 0) {
+                return currentTasks;
+            }
+            return currentTasks.filter(task => {
+                if (!task.tags || task.tags.length === 0) return false;
+                return activeTags.some(activeTag => task.tags.includes(activeTag));
+            });
+        }, [currentTasks, activeTags]);
+        
+        const { swimlaneTasks, priorityTasks } = useMemo(() => {
+            const st = {};
+            const pt = [];
+
+            for (const task of filteredTasks) {
+                let inSwimlane = false;
+                if(task.tags) {
+                    for (const tag of task.tags) {
+                        if (tagSwimlanes.includes(tag)) {
+                            if (!st[tag]) st[tag] = [];
+                            st[tag].push(task);
+                            inSwimlane = true;
+                        }
+                    }
+                }
+                if (!inSwimlane) {
+                    pt.push(task);
+                }
+            }
+            return { swimlaneTasks: st, priorityTasks: pt };
+        }, [filteredTasks, tagSwimlanes]);
+
+        const sortFn = useMemo(() => showArchived ? (a, b) => new Date(b.timestamp) - new Date(a.timestamp) : (a, b) => (a.rank || 0) - (b.rank || 0), [showArchived]);
+        
+        const priorityColumns = useMemo(() => ({
+            high: priorityTasks.filter(t => t.priority === 'high').sort(sortFn),
+            medium: priorityTasks.filter(t => t.priority === 'medium').sort(sortFn),
+            low: priorityTasks.filter(t => t.priority === 'low').sort(sortFn),
+        }), [priorityTasks, sortFn]);
+
+        const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
+        const backgroundOverlayClass = isFocusMode ? 'bg-purple-900/10' : showArchived ? 'bg-red-900/10' : '';
+        
+        return (
+            <div className="h-screen w-screen font-sans flex flex-col" style={{ background: `radial-gradient(circle, rgba(15, 23, 42, 0.9), rgba(10, 15, 30, 1)), linear-gradient(135deg, #0f172a 0%, #1e293b 100%)` }}>
+                
+                {taskToClose && <CloseoutModal task={taskToClose} onConfirm={handleConfirmCloseout} onCancel={() => setTaskToClose(null)} />}
+                {taskToUnarchive && <UnarchiveModal task={taskToUnarchive} onConfirm={handleConfirmUnarchive} onCancel={() => setTaskToUnarchive(null)} />}
+                {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
+                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
+                {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={tagSwimlanes} setSwimlanes={setTagSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
+
+                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
+                    <div className="flex items-center space-x-4">
+                        <TaikoLogo />
+                        <div>
+                            <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em', paddingLeft: '0.2em' }}>Taiko</h1>
+                            <p className="text-slate-400 text-sm">Operations Task Manager</p>
+                        </div>
+                    </div>
+                    <div className="flex-grow flex items-center justify-center min-w-[300px] my-2 md:my-0"><LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} /></div>
+                    <div className="flex items-center space-x-4">
+                        <Tooltip text="Settings"><button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button></Tooltip>
+                        <Tooltip text="Toggle Focus Mode"><button onClick={handleFocusClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 transition-all ${isFocusMode ? 'bg-purple-600 hover:bg-purple-500 focus:ring-purple-400' : 'bg-slate-700 hover:bg-slate-600 focus:ring-slate-500'}`}>{isFocusMode ? 'Exit Focus' : 'Focus Mode'}</button></Tooltip>
+                        <Tooltip text="View Archived Tasks"><button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button></Tooltip>
+                        <AddTaskDropdown onAddTask={handleAddTask} />
+                    </div>
+                </header>
+                
+                <div className="px-6 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                        <button onClick={clearTagFilter}
+                                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                All
+                        </button>
+                        {allTags.map(tag => (
+                            <button key={tag} onClick={() => handleTagFilterClick(tag)}
+                                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                {tag}
+                            </button>
+                        ))}
+                    </div>
+                    <button onClick={() => setShowSwimlaneModal(true)} className="text-sm text-slate-400 hover:text-white bg-slate-700/50 px-3 py-1 rounded-md">Manage Swimlanes</button>
+                </div>
+
+                <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
+                    {tagSwimlanes.map(tag => (
+                        <TagColumn key={tag} tag={tag} tasks={swimlaneTasks[tag] || []} />
+                    ))}
+                    <PriorityColumn priority="high" tasks={priorityColumns.high} isCollapsed={collapsedColumns.high} onToggleCollapse={() => setCollapsedColumns(p => ({...p, high: !p.high}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} />
+                    <PriorityColumn priority="medium" tasks={priorityColumns.medium} isCollapsed={collapsedColumns.medium} onToggleCollapse={() => setCollapsedColumns(p => ({...p, medium: !p.medium}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} />
+                    <PriorityColumn priority="low" tasks={priorityColumns.low} isCollapsed={collapsedColumns.low} onToggleCollapse={() => setCollapsedColumns(p => ({...p, low: !p.low}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} />
+                </main>
+            </div>
+        );
+    };
+
+    // --- Column & Modal Components ---
+    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, isFocusMode, showArchived, isVerticalLayout }) => {
+        const priorityStyles = { high: { title: "High", color: "text-red-400" }, medium: { title: "Medium", color: "text-yellow-400" }, low: { title: "Low", color: "text-sky-400" }};
+        const layoutClasses = isVerticalLayout ? 'w-full' : 'w-full md:w-96 flex-shrink-0';
+        
+        return (
+            <div className={`flex flex-col h-full bg-slate-900/30 rounded-lg ${layoutClasses}`}>
+                <button onClick={onToggleCollapse} className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0`}>
+                    <span>{priorityStyles[priority].title} Priority ({tasks.length})</span>
+                    <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                </button>
+                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out overflow-y-auto ${isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-full opacity-100'}`}>
+                    {tasks.map((task) => <div key={task.id} className={`transition-opacity duration-300 ${(isFocusMode && !showArchived && task.status !== 'In Progress') ? 'opacity-20' : 'opacity-100'}`}><MemoizedTaskCard task={task} /></div>)}
+                </div>
+            </div>
+        );
+    });
+
+    const TagColumn = React.memo(({ tag, tasks }) => {
+        return (
+            <div className="flex flex-col w-full md:w-96 flex-shrink-0 h-full bg-indigo-900/10 rounded-lg">
+                <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-400 bg-slate-900/50 flex-shrink-0">
+                    <span>{tag} ({tasks.length})</span>
+                </div>
+                <div className="flex-grow p-2 overflow-y-auto">
+                    {tasks.map(task => <div key={task.id}><MemoizedTaskCard task={task} /></div>)}
+                </div>
+            </div>
+        );
+    });
+
+    const AddTaskDropdown = React.memo(({ onAddTask }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const dropdownRef = useRef(null);
+        useEffect(() => {
+            const handleClickOutside = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false); };
+            document.addEventListener("mousedown", handleClickOutside);
+            return () => document.removeEventListener("mousedown", handleClickOutside);
+        }, []);
+        const handleSelect = (p) => { onAddTask(p); setIsOpen(false); };
+        return (
+            <div className="relative" ref={dropdownRef}>
+                <button onClick={() => setIsOpen(!isOpen)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all">+ Add Task</button>
+                {isOpen && <div className="absolute right-0 mt-2 w-48 bg-slate-700 rounded-md shadow-lg z-20"><button onClick={() => handleSelect('high')} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-slate-600">High Priority</button><button onClick={() => handleSelect('medium')} className="w-full text-left px-4 py-2 text-sm text-yellow-400 hover:bg-slate-600">Medium Priority</button><button onClick={() => handleSelect('low')} className="w-full text-left px-4 py-2 text-sm text-sky-400 hover:bg-slate-600">Low Priority</button></div>}
+            </div>
+        );
+    });
+
+    const Modal = ({ children, onClose }) => <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">{children}</div>;
+    const ModalContent = ({ title, children, onClose }) => (
+        <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-md text-white" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold p-4 border-b border-slate-700">{title}</h3>
+            <div className="p-4">{children}</div>
+        </div>
+    );
+    const CloseoutModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Task Complete!</h3><p className="text-slate-300 mb-4">Would you like to archive the task "{task.title}"?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Keep Active</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Archive Task</button></div></div></Modal>;
+    const UnarchiveModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Unarchive Task?</h3><p className="text-slate-300 mb-4">You've made a change to an archived task. Would you like to move "{task.title}" back to the active board?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">No, Keep Archived</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Yes, Unarchive</button></div></div></Modal>;
+    const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
+    const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
+        const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
+        return ( 
+            <Modal onClose={onClose}>
+                <ModalContent title="Settings" onClose={onClose}>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between"><label className="text-slate-300">Sound on Task Completion</label><button onClick={() => handleToggle('soundAlerts')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.soundAlerts ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.soundAlerts ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
+                        <div className="flex items-center justify-between"><label className="text-slate-300">Confirm on Delete</label><button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
+                        <div className="flex items-center justify-between"><label className="text-slate-300">Auto-collapse Empty Columns</label><button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
+                        <div className="flex items-center justify-between"><label className="text-slate-300">Stack Columns Vertically</label><button onClick={() => handleToggle('verticalLayout')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.verticalLayout ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.verticalLayout ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
+                    </div>
+                </ModalContent>
+            </Modal> 
+        );
+    };
+
+    const ManageSwimlanesModal = ({ allTags, activeSwimlanes, setSwimlanes, onClose }) => {
+        const handleToggle = (tag) => {
+            setSwimlanes(prev => 
+                prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+            );
+        };
+
+        return (
+            <Modal onClose={onClose}>
+                <ModalContent title="Manage Swimlanes" onClose={onClose}>
+                    <p className="text-sm text-slate-400 mb-4">Select tags to create dedicated columns for them.</p>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {allTags.map(tag => (
+                            <div key={tag} className="flex items-center justify-between p-2 bg-slate-700/50 rounded-md">
+                                <label className="text-slate-300">{tag}</label>
+                                <button onClick={() => handleToggle(tag)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${activeSwimlanes.includes(tag) ? 'bg-indigo-500' : 'bg-slate-600'}`}>
+                                    <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${activeSwimlanes.includes(tag) ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-6 text-right">
+                        <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Done</button>
+                    </div>
+                </ModalContent>
+            </Modal>
+        );
+    };
+
+
+    // --- App Entry Point ---
+    const AppContainer = () => {
+        return <App />;
+    };
+
+    const TaikoApp = () => {
+        return (
+            <AppProvider>
+                <AppContainer />
+            </AppProvider>
+        );
+    }
+    
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TaikoApp />);
+
+    </script>
+</body>
+</html>
