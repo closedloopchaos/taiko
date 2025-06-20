@@ -70,6 +70,13 @@
         HIGH: 'PRIORITY_HIGH'
     };
 
+    const getPrioritySortValue = (priority) => {
+        if (priority === PRIORITIES.HIGH) return 0;
+        if (priority === PRIORITIES.MEDIUM) return 1;
+        if (priority === PRIORITIES.LOW) return 2;
+        return 3; // For null or undefined priority (Unprioritized)
+    };
+
     // PRIORITY_CONFIG must be defined after PRIORITIES and before constants that use it.
     // We will add sound generation parameters here later if needed, or handle in the playSound function.
     const PRIORITY_CONFIG = {
@@ -145,7 +152,7 @@
         const [activeTags, setActiveTags] = useState([]);
         const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved from App
         const [activeSwimlanes, setActiveSwimlanes] = useState([]);
-        const [collapsedColumns, setCollapsedColumns] = useState({ 'new-tasks': false }); // For fixed columns like "New Tasks"
+        const [collapsedColumns, setCollapsedColumns] = useState({ 'unsorted': false }); // For fixed columns like "Unsorted"
 
         // No new state needed here for clear archive modal, will be in App.js
         
@@ -184,7 +191,7 @@
             const savedCollapsedTagSwimlanes = localStorage.getItem(`${appId}-collapsedTagSwimlanes`);
             if (savedCollapsedTagSwimlanes) try { setCollapsedTagSwimlanes(JSON.parse(savedCollapsedTagSwimlanes)); } catch { console.error("Could not parse saved collapsed tag swimlanes."); setCollapsedTagSwimlanes({}); }
             
-            const defaultCollapsedColumns = { 'new-tasks': false };
+            const defaultCollapsedColumns = { 'unsorted': false }; // Updated key
             const savedCollapsedColumns = localStorage.getItem(`${appId}-collapsedColumns`);
             if (savedCollapsedColumns) {
                 try {
@@ -279,16 +286,21 @@
         }, []);
 
         const allTags = useMemo(() => {
-            // Start with all defined priority display titles so they are always available for swimlane/filter selection
-            const tagsSet = new Set(PRIORITY_DISPLAY_TITLES_ARRAY); // Use globally defined constant
-
-            // Add tags from non-archived tasks
-            tasks.filter(task => !task.archived).forEach(task => {
-                (task.tags || []).forEach(tag => tagsSet.add(tag)); // This will include priority display titles if they are on tasks
+            // allTags should only contain actual custom tags, not priority display titles.
+            const customTagsSet = new Set();
+            tasks.forEach(task => { // Iterate over all tasks for comprehensive tag discovery
+                (task.tags || []).forEach(tag => {
+                    // Check if the tag is a priority display title (case-insensitive)
+                    const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
+                        pTitle => pTitle.toLowerCase() === tag.toLowerCase()
+                    );
+                    if (!isPriorityTitle) {
+                        customTagsSet.add(tag);
+                    }
+                });
             });
-            
-            return Array.from(tagsSet).sort();
-        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Dependency updated
+            return Array.from(customTagsSet).sort();
+        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // PRIORITY_DISPLAY_TITLES_ARRAY is stable
 
         // --- Swimlane Collapse Management ---
         const expandSwimlane = useCallback((swimlaneName) => {
@@ -507,9 +519,19 @@
         const [reminderInput, setReminderInput] = useState('');
         const [checklist, setChecklist] = useState(task.checklist || []);
         const [newTag, setNewTag] = useState('');
+        const [tagError, setTagError] = useState('');
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
         useEffect(() => { setTitle(task.title); }, [task.title]);
+
+        useEffect(() => {
+            if (tagError) {
+                const timer = setTimeout(() => {
+                    setTagError('');
+                }, 3000); // Clear error after 3 seconds
+                return () => clearTimeout(timer);
+            }
+        }, [tagError]);
         
         const handleDeleteRequest = useCallback(() => {
             if (settings.confirmOnDelete) {
@@ -565,15 +587,20 @@
         const handleAddTag = () => {
             const currentTags = task.tags || [];
             const trimmedNewTag = newTag.trim();
-
-            if (trimmedNewTag && !currentTags.includes(trimmedNewTag)) {
+    
+            // Prohibit adding priority display titles as custom tags (case-insensitive)
+            const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
+                pTitle => pTitle.toLowerCase() === trimmedNewTag.toLowerCase()
+            );
+    
+            if (trimmedNewTag && !isPriorityTitle && !currentTags.includes(trimmedNewTag)) {
                 // Get custom tags *before* adding the new one.
                 // task.tags should only store custom tags.
                 const existingCustomTagsCount = currentTags.length;
-
+    
                 const newTagsArray = [...currentTags, trimmedNewTag];
                 updateTask(task.id, { tags: newTagsArray });
-
+    
                 // Only auto-activate swimlane if this is the *first* custom tag added to the task,
                 // and ensure the tag itself is not a priority display title (which it shouldn't be for custom tags).
                 if (existingCustomTagsCount === 0 && !PRIORITY_DISPLAY_TITLES_ARRAY.includes(trimmedNewTag)) {
@@ -585,8 +612,11 @@
                         return prevActiveSwimlanes;
                     });
                 }
-                setNewTag('');
+            } else if (isPriorityTitle) {
+                setTagError('Cannot add "Low", "Medium", or "High" as custom tags. Use priority buttons.');
+                playTone(220, 0.3, 'square', 0.2); // Play a low, short error tone
             }
+            setNewTag(''); // Clear input in all cases
         };
 
         const handleRemoveTag = (tagToRemove) => {
@@ -739,9 +769,10 @@
                                 {allTags.map(tag => <option key={tag} value={tag} />)}
                             </datalist>
                             <Tooltip text="Add this tag to the task">
-                                <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 rounded-md hover:bg-sky-500">Add</button>
+                                <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500">Add</button> {/* Adjusted py-1 for consistency */}
                             </Tooltip>
                         </div>
+                        {tagError && <div className="mt-1.5 text-xs text-red-400">{tagError}</div>}
                     </div>
 
                     {isSettingReminder && !task.archived && (
@@ -833,6 +864,8 @@
         const [clockTimezone, setClockTimezone] = useState('EST');
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
         
+        const [draggedSwimlane, setDraggedSwimlane] = useState(null); // For swimlane reordering
+
         // State for the main "Add Task" input in the header
         const [showMainAddTaskInput, setShowMainAddTaskInput] = useState(false);
         const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
@@ -840,6 +873,32 @@
         const currentTasks = useMemo(() => showArchived ? tasks.filter(t => t.archived) : tasks.filter(t => !t.archived), [tasks, showArchived]);
         
         const prevTasks = usePrevious(currentTasks);
+
+        useEffect(() => {
+            // Ensure that when the view switches between active and archived,
+            // or when tasks are modified, the counts for filters are based on the currently displayed tasks.
+            // The `currentTasks` variable already reflects this.
+        }, [currentTasks]);
+
+        const allTasksCount = useMemo(() => currentTasks.length, [currentTasks]);
+
+        const priorityFilterCounts = useMemo(() => {
+            const counts = {};
+            DISPLAY_PRIORITY_ORDER.forEach(priorityConstant => {
+                const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
+                counts[displayTitle] = currentTasks.filter(task => task.priority === priorityConstant).length;
+            });
+            return counts;
+        }, [currentTasks]); // DISPLAY_PRIORITY_ORDER and PRIORITY_CONFIG are stable constants
+
+        const customTagFilterCounts = useMemo(() => {
+            const counts = {};
+            const customTagsToDisplay = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag));
+            customTagsToDisplay.forEach(tag => {
+                counts[tag] = currentTasks.filter(task => task.tags && task.tags.includes(tag)).length;
+            });
+            return counts;
+        }, [currentTasks, allTags]); // PRIORITY_DISPLAY_TITLES_ARRAY is a stable constant
 
         useEffect(() => {
             if (!prevTasks || !currentTasks) return;
@@ -910,9 +969,13 @@
         // Or if a priority swimlane's corresponding priority tag is removed from allTags
         useEffect(() => {
             setActiveSwimlanes(currentActiveSwimlanes =>
-                currentActiveSwimlanes.filter(swimlaneTag => allTags.includes(swimlaneTag))
+                currentActiveSwimlanes.filter(swimlaneName => {
+                    const isPrioritySwimlane = PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
+                    // Keep if it's a priority swimlane OR if it's a custom tag present in allTags
+                    return isPrioritySwimlane || allTags.includes(swimlaneName);
+                })
             );
-        }, [allTags, setActiveSwimlanes]);
+        }, [allTags, setActiveSwimlanes, PRIORITY_TITLE_TO_CONSTANT_MAP]); // PRIORITY_TITLE_TO_CONSTANT_MAP is stable
         
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled
         useEffect(() => {
@@ -967,6 +1030,32 @@
 
         const clearTagFilter = () => setActiveTags([]);
 
+        // --- Swimlane Drag and Drop Handlers ---
+        const handleDragStartSwimlane = (e, swimlaneName) => {
+            setDraggedSwimlane(swimlaneName);
+            e.dataTransfer.effectAllowed = 'move';
+            // Optional: Add a class to the body or a specific element for global drag styling
+        };
+
+        const handleDragOverSwimlane = (e) => {
+            e.preventDefault(); // Necessary to allow dropping
+        };
+
+        const handleDropSwimlane = (targetSwimlaneName) => {
+            if (!draggedSwimlane || draggedSwimlane === targetSwimlaneName) {
+                setDraggedSwimlane(null);
+                return;
+            }
+            const newActiveSwimlanes = [...activeSwimlanes];
+            const draggedIndex = newActiveSwimlanes.indexOf(draggedSwimlane);
+            const targetIndex = newActiveSwimlanes.indexOf(targetSwimlaneName);
+
+            newActiveSwimlanes.splice(draggedIndex, 1); // Remove dragged item
+            newActiveSwimlanes.splice(targetIndex, 0, draggedSwimlane); // Insert at new position
+            setActiveSwimlanes(newActiveSwimlanes);
+            setDraggedSwimlane(null);
+        };
+
         const filteredTasksByTagsAndPriority = useMemo(() => {
             if (activeTags.length === 0) return currentTasks;
             return currentTasks.filter(task =>
@@ -980,12 +1069,25 @@
         const { swimlaneTasks, unclassifiedTasks } = useMemo(() => { // Renamed priorityTasks to unclassifiedTasks
             const st = {};
             const ut = []; // unclassifiedTasks
+
+            const taskSorter = (a, b) => {
+                const priorityA = getPrioritySortValue(a.priority);
+                const priorityB = getPrioritySortValue(b.priority);
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                }
+                // Secondary sort: rank for active, timestamp for archived
+                if (showArchived) {
+                    return new Date(b.timestamp) - new Date(a.timestamp); // Newest archived first
+                } else {
+                    // Lower rank first. Tasks with null/undefined rank go to the bottom of their priority group.
+                    return (a.rank ?? Infinity) - (b.rank ?? Infinity); 
+                }
+            };
+
             for (const task of filteredTasksByTagsAndPriority) {
                 let inSwimlane = false;
                 
-                // Iterate through all active swimlanes.
-                // A task is assigned to the *first* active swimlane whose name is found in the task's tags.
-                // If the swimlane name is a priority display title, check the task's priority field instead.
                 for (const swimlaneName of activeSwimlanes) { 
                     const isPrioritySwimlane = PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
                     let matchesSwimlane = false;
@@ -1004,17 +1106,20 @@
                     }
                 }
 
-                // If the task was not placed in any active swimlane (i.e., no matching tag found),
-                // it goes into the unclassifiedTasks list (rendered in "New Tasks" column),
-                // regardless of its priority value.
                 if (!inSwimlane) {
                     ut.push(task);
                 }
-            } // PRIORITY_TITLE_TO_CONSTANT_MAP is a global constant, not needed in deps
-            return { swimlaneTasks: st, unclassifiedTasks: ut }; // PRIORITY_TITLE_TO_CONSTANT_MAP is a global constant, not needed in deps
-        }, [filteredTasksByTagsAndPriority, activeSwimlanes]);
-        const sortFn = useMemo(() => showArchived ? (a, b) => new Date(b.timestamp) - new Date(a.timestamp) : (a, b) => (a.rank || 0) - (b.rank || 0), [showArchived]);
-        // priorityColumns memo is removed as fixed L/M/H columns are gone.
+            }
+
+            // Sort unclassified tasks
+            ut.sort(taskSorter);
+
+            // Sort tasks within each swimlane
+            for (const swimlaneName in st) {
+                st[swimlaneName].sort(taskSorter);
+            }
+            return { swimlaneTasks: st, unclassifiedTasks: ut }; 
+        }, [filteredTasksByTagsAndPriority, activeSwimlanes, showArchived, PRIORITY_TITLE_TO_CONSTANT_MAP]); // Added showArchived and PRIORITY_TITLE_TO_CONSTANT_MAP
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
         const backgroundOverlayClass = showArchived ? 'bg-red-900/10' : '';
@@ -1077,7 +1182,7 @@
                             <button onClick={clearTagFilter} // This button clears all activeTags, including priority titles
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     All
-                            </button>
+                                    <span className="opacity-80"> ({allTasksCount})</span>                            </button>
                         </Tooltip>
                         {/* Render Priority Filter Buttons First in Specific Order */}
                         {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
@@ -1088,18 +1193,18 @@
                                         onClick={() => handleTagFilterClick(displayTitle)}
                                         className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}
                                     >
-                                        {displayTitle}
+                                        {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
                                     </button>
                                 </Tooltip>
                             );
                         })}
                         {/* Render Other Tag Filters (excluding priority display titles) */}
-                        {allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).map(tag => (
+                        {allTags.map(tag => ( // allTags is now already filtered to be custom tags only
                             <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
                                 <button onClick={() => handleTagFilterClick(tag)}
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     {tag}
-                                </button>
+                                    <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>                                </button>
                             </Tooltip>
                         ))}
                     </div>
@@ -1111,18 +1216,21 @@
                 <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
                     {/* --- "New Tasks" Column (replaces Triage) --- */}
                     {(() => { // This column displays unclassifiedTasks
-                        const newTasksToDisplay = unclassifiedTasks.sort(sortFn);
-                        const isEffectivelyCollapsed = (settings.autoCollapse && newTasksToDisplay.length === 0) ? true : (collapsedColumns['new-tasks'] || false);
+                        const unsortedTasksToDisplay = unclassifiedTasks;
+                        const isEffectivelyCollapsedUnsorted = (settings.autoCollapse && unsortedTasksToDisplay.length === 0) ? true : (collapsedColumns['unsorted'] || false);
+                        
+                        // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
+                        const shouldRenderUnsortedColumn = unsortedTasksToDisplay.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedUnsorted);
 
-                        if (newTasksToDisplay.length > 0 || !settings.autoCollapse || (settings.autoCollapse && !isEffectivelyCollapsed) ) {
+                        if (shouldRenderUnsortedColumn) {
                             return (
                                 <PriorityColumn
-                                    key="triage-column"
-                                    titleOverride="New Tasks" // New prop to set a custom title
+                                    key="unsorted-column"
+                                    titleOverride="Unsorted" // Updated title
                                     priority={null} // Base styling on unprioritized, but title is overridden
-                                    tasks={newTasksToDisplay}
-                                    isCollapsed={isEffectivelyCollapsed}
-                                    onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'new-tasks': !p['new-tasks'] }))}
+                                    tasks={unsortedTasksToDisplay}
+                                    isCollapsed={isEffectivelyCollapsedUnsorted}
+                                    onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'unsorted': !p['unsorted'] }))}
                                     showArchived={showArchived}
                                     isVerticalLayout={settings.verticalLayout}
                                     clockTimezone={clockTimezone}
@@ -1133,23 +1241,39 @@
                     {activeSwimlanes.map(item => { // Iterate over all active swimlanes (tags or priority display titles)
                         const tasksForThisSwimlane = swimlaneTasks[item] || [];
                         const isManuallyCollapsed = collapsedTagSwimlanes[item] || false;
-                        // Determine effective collapsed state based on auto-collapse setting and task count
-                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
+                        const isEffectivelyCollapsedTag = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
+
+                        // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
+                        const shouldRenderTagColumn = tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedTag);
+
+                        if (!shouldRenderTagColumn) {
+                            return null; // Hide the column if filters make it empty, or if no filters and it's effectively collapsed
+                        }
 
                         // All active swimlanes (including those named "High", "Medium", "Low")
                         // will now be rendered by TagColumn.
-                        // The "New Tasks" column is handled separately above using PriorityColumn.
+                        // The "Unsorted" column is handled separately above.
                         return (
-                            <TagColumn 
-                                key={item} 
-                                tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
-                                tasks={tasksForThisSwimlane} 
-                                clockTimezone={clockTimezone}
-                                isCollapsed={isEffectivelyCollapsed}
-                                onToggleCollapse={() => toggleSwimlaneCollapse(item)}
-                                isVerticalLayout={settings.verticalLayout} />
+                            <div
+                                key={item}
+                                draggable={!settings.verticalLayout} // Only allow drag in horizontal mode for now
+                                onDragStart={(e) => !settings.verticalLayout && handleDragStartSwimlane(e, item)}
+                                onDragOver={!settings.verticalLayout ? handleDragOverSwimlane : undefined}
+                                onDrop={() => !settings.verticalLayout && handleDropSwimlane(item)}
+                                className={`transition-opacity duration-200 ${draggedSwimlane === item ? 'opacity-30' : 'opacity-100'} ${settings.verticalLayout ? 'w-full' : 'flex-1 min-w-0'}`}
+                            >
+                                <TagColumn 
+                                    tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
+                                    tasks={tasksForThisSwimlane} 
+                                    clockTimezone={clockTimezone}
+                                    isCollapsed={isEffectivelyCollapsedTag}
+                                    onToggleCollapse={() => toggleSwimlaneCollapse(item)}
+                                    isVerticalLayout={settings.verticalLayout}
+                                    isBeingDragged={draggedSwimlane === item}
+                                />
+                            </div>
                         );
-                    })}
+                    })}                    
                     {/* Default Priority Columns are removed. They are now handled as selectable swimlanes if their tags exist. */}
                 </main>
             </div>
@@ -1167,7 +1291,7 @@
         let displayTitleText = titleOverride || config.title;
         if (isSwimlane && !titleOverride && config.title !== PRIORITY_CONFIG.null.title) {
             displayTitleText = `${config.title} Priority`;
-        }
+        } // "Unsorted" will use titleOverride
 
         const headerColorClass = titleOverride ? (isSwimlane ? 'text-slate-300' : 'text-slate-200') : config.color; // Generic color for "New Tasks", specific for priorities
 
@@ -1185,14 +1309,14 @@
             if (!titleFromInput.trim()) { setShowQuickAdd(false); return; }
 
             let taskPriorityToAdd = null;
-            let taskTagsToAdd = [];
+            let taskTagsToAdd = []; // Default for "Unsorted" or priority columns
 
             if (titleOverride) { // "New Tasks" column
                 taskPriorityToAdd = null;
                 taskTagsToAdd = [];
             } else if (priority) { // Priority swimlane
                 taskPriorityToAdd = priority; // The actual priority constant like PRIORITIES.LOW
-                taskTagsToAdd = [PRIORITY_CONFIG[priority].title]; // The display title like "Low"
+                taskTagsToAdd = []; // DO NOT add the priority display title to tags array
             }
             
             addTask(titleFromInput.trim(), taskPriorityToAdd, taskTagsToAdd);
@@ -1256,11 +1380,12 @@
         );
     });
 
-    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout }) => {
+    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout, isBeingDragged }) => {
         const { addTask } = useAppContext();
         const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
+        const dragStyle = isBeingDragged ? 'border-dashed border-sky-500' : 'border-indigo-800/50';
 
         const headerContent = (
             <>
@@ -1283,12 +1408,12 @@
         };
 
         return (
-            <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border border-indigo-800/50 rounded-lg ${columnLayoutClasses}`}>
+            <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border rounded-lg ${columnLayoutClasses} ${dragStyle} transition-all`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button
                             onClick={onToggleCollapse}
-                            className="flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
+                            className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors ${isBeingDragged ? 'cursor-grabbing' : 'cursor-pointer'}`}
                         >
                             <div className="flex-grow min-w-0">{headerContent}</div>
                             {!isCollapsed && !showQuickAdd && (
@@ -1304,7 +1429,7 @@
                         </button>
                     </Tooltip>
                 ) : (
-                    <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0">
+                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0 ${isBeingDragged ? 'cursor-grabbing' : 'cursor-grab'}`}>
                         <div className="flex-grow min-w-0">{headerContent}</div>
                          {!showQuickAdd && (
                             <Tooltip text={`Quick add to ${tag}`}>
@@ -1444,7 +1569,8 @@
                 prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
             );
         };
-        const manageableTags = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).sort();
+        // allTags from context is now already just custom tags, sorted.
+        const manageableTags = allTags; 
 
         const doneButton = (
             <Tooltip text="Close swimlane management">
