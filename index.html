@@ -58,6 +58,34 @@
 
     const { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } = React;
 
+    // --- Global Constants & Configurations ---
+    const PRIORITIES = { // These are the internal constant values
+        LOW: 'PRIORITY_LOW', // Actual tag string
+        MEDIUM: 'PRIORITY_MEDIUM',
+        HIGH: 'PRIORITY_HIGH'
+    };
+
+    // PRIORITY_CONFIG must be defined after PRIORITIES and before constants that use it.
+    const PRIORITY_CONFIG = {
+        [PRIORITIES.LOW]: { title: "Low", color: "text-sky-400", bgColor: "bg-sky-500/20", borderColor: "border-sky-500", pulseClass: 'pulse-border-low' },
+        [PRIORITIES.MEDIUM]: { title: "Medium", color: "text-yellow-400", bgColor: "bg-yellow-500/20", borderColor: "border-yellow-500", pulseClass: 'pulse-border-medium' },
+        [PRIORITIES.HIGH]: { title: "High", color: "text-red-400", bgColor: "bg-red-500/20", borderColor: "border-red-500", pulseClass: 'pulse-border-high' },
+        null: { title: "Unprioritized", color: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-600", pulseClass: '' } // For null priority
+    };
+
+    // Now define constants that depend on PRIORITIES and PRIORITY_CONFIG
+    const PRIORITY_DISPLAY_TITLES_ARRAY = Object.values(PRIORITIES) // e.g., ["Low", "Medium", "High"]
+        .map(pKey => PRIORITY_CONFIG[pKey]?.title)
+        .filter(Boolean); // e.g., ["Low", "Medium", "High"]
+    const PRIORITY_TITLE_TO_CONSTANT_MAP = Object.fromEntries( // e.g., { "Low": "PRIORITY_LOW", ... }
+      Object.values(PRIORITIES).map(pConstant => [PRIORITY_CONFIG[pConstant]?.title, pConstant]).filter(([title]) => title)
+    ); // e.g., { "Low": "PRIORITY_LOW", ... }
+
+    const TASK_STATUS = { TO_DO: 'To Do', IN_PROGRESS: 'In Progress', ON_HOLD: 'On Hold', DONE: 'Done' };
+    const TIMEZONE_MAP = { EST: 'America/New_York', PST: 'America/Los_Angeles', UTC: 'UTC' };
+    const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
+    const TASK_STATUS_CONFIG = { [TASK_STATUS.TO_DO]: { color: 'bg-sky-500', label: 'To Do' }, [TASK_STATUS.IN_PROGRESS]: { color: 'bg-yellow-500', label: 'In Progress' }, [TASK_STATUS.ON_HOLD]: { color: 'bg-slate-500', label: 'On Hold' }, [TASK_STATUS.DONE]: { color: 'bg-green-500', label: 'Done' } };
+
     // --- Context for State Management ---
     const AppContext = createContext(null);
 
@@ -75,6 +103,12 @@
         const [taskToClose, setTaskToClose] = useState(null);
         const [taskToUnarchive, setTaskToUnarchive] = useState(null);
         const [taskToDelete, setTaskToDelete] = useState(null);
+        // --- UI Interaction State (lifted from App) ---
+        const [activeTags, setActiveTags] = useState([]);
+        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved from App
+        const [activeSwimlanes, setActiveSwimlanes] = useState([]);
+        const [collapsedColumns, setCollapsedColumns] = useState({ 'new-tasks': false }); // For fixed columns like "New Tasks"
+
         // No new state needed here for clear archive modal, will be in App.js
         
         const appId = 'taiko-app-local';
@@ -102,7 +136,29 @@
             } else {
                 setSettings(defaultSettings); // No saved settings, use defaults
             }
-        }, [appId]); // Added appId to dependencies as it's used, though it's constant here.
+
+            const savedActiveTags = localStorage.getItem(`${appId}-activeTags`);
+            if (savedActiveTags) try { setActiveTags(JSON.parse(savedActiveTags)); } catch { console.error("Could not parse saved active tags."); setActiveTags([]); }
+
+            const savedActiveSwimlanes = localStorage.getItem(`${appId}-activeSwimlanes`);
+            if (savedActiveSwimlanes) try { setActiveSwimlanes(JSON.parse(savedActiveSwimlanes)); } catch { console.error("Could not parse saved active swimlanes."); setActiveSwimlanes([]); }
+
+            const savedCollapsedTagSwimlanes = localStorage.getItem(`${appId}-collapsedTagSwimlanes`);
+            if (savedCollapsedTagSwimlanes) try { setCollapsedTagSwimlanes(JSON.parse(savedCollapsedTagSwimlanes)); } catch { console.error("Could not parse saved collapsed tag swimlanes."); setCollapsedTagSwimlanes({}); }
+            
+            const defaultCollapsedColumns = { 'new-tasks': false };
+            const savedCollapsedColumns = localStorage.getItem(`${appId}-collapsedColumns`);
+            if (savedCollapsedColumns) {
+                try {
+                    setCollapsedColumns(JSON.parse(savedCollapsedColumns));
+                } catch {
+                    console.error("Could not parse saved collapsed columns. Using defaults.");
+                    setCollapsedColumns(defaultCollapsedColumns);
+                }
+            } else {
+                setCollapsedColumns(defaultCollapsedColumns);
+            }
+        }, [appId]); 
 
         useEffect(() => {
             localStorage.setItem(`${appId}-tasks`, JSON.stringify(tasks));
@@ -111,6 +167,22 @@
         useEffect(() => {
             localStorage.setItem(`${appId}-settings`, JSON.stringify(settings));
         }, [settings]);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-activeTags`, JSON.stringify(activeTags));
+        }, [activeTags, appId]);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-activeSwimlanes`, JSON.stringify(activeSwimlanes));
+        }, [activeSwimlanes, appId]);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-collapsedTagSwimlanes`, JSON.stringify(collapsedTagSwimlanes));
+        }, [collapsedTagSwimlanes, appId]);
+
+        useEffect(() => {
+            localStorage.setItem(`${appId}-collapsedColumns`, JSON.stringify(collapsedColumns));
+        }, [collapsedColumns, appId]);
 
         // --- Notification Permission ---
         useEffect(() => {
@@ -126,23 +198,23 @@
             ));
         }, []);
         
-        const addTask = useCallback((priority) => {
+        const addTask = useCallback((initialTitle = 'New Task', initialPriority = null, initialTags = []) => {
             const newTask = {
                 id: crypto.randomUUID(),
-                title: 'New Task', 
+                title: initialTitle, 
                 checklist: [{ id: crypto.randomUUID(), text: 'First item', completed: false }],
-                priority, 
+                priority: initialPriority, 
                 status: 'To Do', 
-                archived: false, 
-                rank: tasks.filter(t => t.priority === priority && !t.archived).length,
+                archived: false,
+                rank: tasks.filter(t => t.priority === initialPriority && !t.archived).length, // Rank will be based on the current priority value
                 timestamp: new Date().toISOString(), 
                 startedAt: null, 
                 totalElapsedTimeInSeconds: 0,
                 reminderAt: null, 
                 reminderFired: false, 
-                tags: []
+                tags: Array.isArray(initialTags) ? [...new Set(initialTags)] : [] // Ensure unique tags
             };
-            setTasks(prevTasks => [...prevTasks, newTask]);
+            setTasks(prevTasks => [newTask, ...prevTasks].sort((a, b) => (a.rank || 0) - (b.rank || 0) || new Date(a.timestamp) - new Date(b.timestamp))); // Add to top and re-sort
         }, [tasks]);
 
         const deleteTask = useCallback((id) => {
@@ -169,13 +241,25 @@
         }, []);
 
         const allTags = useMemo(() => {
-            const tags = new Set();
-            // Only consider tags from non-archived tasks
+            // Start with all defined priority display titles so they are always available for swimlane/filter selection
+            const tagsSet = new Set(PRIORITY_DISPLAY_TITLES_ARRAY); // Use globally defined constant
+
+            // Add tags from non-archived tasks
             tasks.filter(task => !task.archived).forEach(task => {
-                (task.tags || []).forEach(tag => tags.add(tag));
+                (task.tags || []).forEach(tag => tagsSet.add(tag)); // This will include priority display titles if they are on tasks
             });
-            return Array.from(tags).sort();
-        }, [tasks]);
+            
+            return Array.from(tagsSet).sort();
+        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Dependency updated
+
+        // --- Swimlane Collapse Management ---
+        const expandSwimlane = useCallback((swimlaneName) => {
+            setCollapsedTagSwimlanes(prev => ({ ...prev, [swimlaneName]: false }));
+        }, []); // setCollapsedTagSwimlanes is stable
+        const toggleSwimlaneCollapse = useCallback((swimlaneName) => {
+            setCollapsedTagSwimlanes(prev => ({ ...prev, [swimlaneName]: !prev[swimlaneName] }));
+        }, []); // setCollapsedTagSwimlanes is stable
+
 
         const contextValue = useMemo(() => ({
             tasks, updateTask, addTask, deleteTask, archiveTask, clearArchive,
@@ -183,7 +267,24 @@
             taskToClose, setTaskToClose,
             taskToUnarchive, setTaskToUnarchive,
             taskToDelete, setTaskToDelete,
-        }), [tasks, settings, allTags, taskToClose, taskToUnarchive, taskToDelete, clearArchive]);
+            activeTags, setActiveTags,
+            activeSwimlanes, setActiveSwimlanes,
+            collapsedTagSwimlanes, setCollapsedTagSwimlanes,
+            collapsedColumns, setCollapsedColumns, // Added for fixed columns
+            expandSwimlane,        
+            toggleSwimlaneCollapse 
+        }), [
+            tasks, updateTask, addTask, deleteTask, archiveTask, clearArchive,
+            settings, setSettings, allTags,
+            taskToClose, setTaskToClose,
+            taskToUnarchive, setTaskToUnarchive,
+            taskToDelete, setTaskToDelete,
+            activeTags, setActiveTags,
+            activeSwimlanes, setActiveSwimlanes,
+            collapsedTagSwimlanes, setCollapsedTagSwimlanes,
+            collapsedColumns, setCollapsedColumns,
+            expandSwimlane, toggleSwimlaneCollapse
+        ]);
         
         return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
     };
@@ -235,42 +336,8 @@
         const totalSeconds = h * 3600 + m * 60 + s;
         return totalSeconds > 0 ? totalSeconds : null;
     };
-
-    // --- Global Constants & Configurations ---
-    const PRIORITIES = {
-        LOW: 'low',
-        MEDIUM: 'medium',
-        HIGH: 'high'
-    };
-    const PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For internal logic if specific order needed
-    const DISPLAY_PRIORITY_ORDER = [PRIORITIES.HIGH, PRIORITIES.MEDIUM, PRIORITIES.LOW]; // For UI column display
-
-    const TASK_STATUS = {
-        TO_DO: 'To Do',
-        IN_PROGRESS: 'In Progress',
-        ON_HOLD: 'On Hold',
-        DONE: 'Done'
-    };
-
-    const TIMEZONE_MAP = {
-        EST: 'America/New_York',
-        PST: 'America/Los_Angeles',
-        UTC: 'UTC'
-    };
-    const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
-
-    const PRIORITY_CONFIG = {
-        [PRIORITIES.LOW]: { title: "Low", color: "text-sky-400", icon: '▲', label: 'Low', pulseClass: 'pulse-border-low' },
-        [PRIORITIES.MEDIUM]: { title: "Medium", color: "text-yellow-400", icon: '▲▲', label: 'Medium', pulseClass: 'pulse-border-medium' },
-        [PRIORITIES.HIGH]: { title: "High", color: "text-red-400", icon: '▲▲▲', label: 'High', pulseClass: 'pulse-border-high' }
-    };
-
-    const TASK_STATUS_CONFIG = {
-        [TASK_STATUS.TO_DO]: { color: 'bg-sky-500', label: 'To Do' },
-        [TASK_STATUS.IN_PROGRESS]: { color: 'bg-yellow-500', label: 'In Progress' },
-        [TASK_STATUS.ON_HOLD]: { color: 'bg-slate-500', label: 'On Hold' },
-        [TASK_STATUS.DONE]: { color: 'bg-green-500', label: 'Done' }
-    };
+    const PRIORITY_TAGS_LIST = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // May be unused by new logic but kept for now.
+    const DISPLAY_PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For UI column display - CHANGED ORDER
 
     // --- Icon Components (Memoized) ---
     const ArchiveIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>);
@@ -294,6 +361,7 @@
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
         </svg>
     ));
+    const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
     // --- Time & Countdown Components (Memoized) ---
@@ -383,15 +451,6 @@
         </li>
     ));
 
-    const PriorityIndicator = React.memo(({ priority, onClick }) => {
-        const current = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG[PRIORITIES.LOW];
-        return (
-            <Tooltip text={`Priority: ${current.title}. Click to change.`}>
-                <button onClick={onClick} className={`flex items-center space-x-1 text-xs font-semibold ${current.color} hover:opacity-75 transition-opacity`}><span>{current.icon}</span></button>
-            </Tooltip>
-        );
-    });
-
     const Tooltip = ({ text, children }) => (
         <div className="relative group flex items-center">
             {children}
@@ -401,7 +460,7 @@
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone }) => { // Added clockTimezone prop
-        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete } = useAppContext();
+        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete, setActiveTags, setActiveSwimlanes, expandSwimlane } = useAppContext();
         const now = useNow();
 
         const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
@@ -455,8 +514,18 @@
         const handleAddTag = () => {
             const currentTags = task.tags || [];
             if (newTag && !currentTags.includes(newTag)) {
-                const newTags = [...currentTags, newTag.trim()];
-                updateTask(task.id, { tags: newTags });
+                const trimmedNewTag = newTag.trim();
+                const newTagsArray = [...currentTags, trimmedNewTag];
+                updateTask(task.id, { tags: newTagsArray });
+
+                // Ensure the swimlane for this tag is active and expand it.
+                setActiveSwimlanes(prevActiveSwimlanes => {
+                    expandSwimlane(trimmedNewTag); // Expand the swimlane
+                    if (!prevActiveSwimlanes.includes(trimmedNewTag)) {
+                        return [...prevActiveSwimlanes, trimmedNewTag]; // Add to active if not already
+                    }
+                    return prevActiveSwimlanes;
+                });
                 setNewTag('');
             }
         };
@@ -482,11 +551,34 @@
             setIsSettingReminder(false);
             setReminderInput(''); // Clear input after setting
         }, [reminderInput, task.id, updateTask, setIsSettingReminder, setReminderInput]);
+        
+        const handleSetPriorityTag = (priorityConstantToSet) => { // e.g., PRIORITIES.HIGH or null
+            let currentTaskTags = task.tags || [];
+            
+            let newPriorityConstant = task.priority; // Start with current priority
+            let newPriorityDisplayTitle = null;
 
-        const handlePriorityChange = () => {
-            updateTask(task.id, { priority: PRIORITY_ORDER[(PRIORITY_ORDER.indexOf(task.priority) + 1) % PRIORITY_ORDER.length] });
+            if (priorityConstantToSet && task.priority !== priorityConstantToSet) {
+                newPriorityConstant = priorityConstantToSet;
+                newPriorityDisplayTitle = PRIORITY_CONFIG[priorityConstantToSet].title;
+            } else if (priorityConstantToSet && task.priority === priorityConstantToSet) {
+                // Clicking the same priority again clears it
+                newPriorityConstant = null;
+            } else if (!priorityConstantToSet) { // Explicitly clearing (e.g. "Clear" button)
+                 newPriorityConstant = null;
+            }
+
+            updateTask(task.id, { priority: newPriorityConstant });
+
+            if (newPriorityDisplayTitle && !activeSwimlanes.includes(newPriorityDisplayTitle)) {
+                 setActiveSwimlanes(prevActiveSwimlanes => {
+                    return [...prevActiveSwimlanes, newPriorityDisplayTitle];
+                });
+            }
         };
         
+
+
         const handlePauseTask = () => {
             if (!task.startedAt) return;
             const elapsed = (new Date().getTime() - new Date(task.startedAt).getTime()) / 1000;
@@ -500,7 +592,7 @@
         };
 
         const reminderIsDue = task.reminderAt && !task.reminderFired && now > new Date(task.reminderAt);
-        const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || PRIORITY_CONFIG[PRIORITIES.LOW].pulseClass) : '';
+        const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || '') : '';
 
         return (
             <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
@@ -509,14 +601,12 @@
                     <div className="flex justify-between items-start mb-2">
                         {isEditingTitle ? (
                             <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" />
-                        ) : (
+                        ) : ( // Priority Indicator removed from here
                             <Tooltip text="Double-click to edit title">
                                 <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>
                             </Tooltip>
                         )}
-                        {!task.archived && (
-                            <PriorityIndicator priority={task.priority} onClick={handlePriorityChange} />
-                        )}
+                        {/* Priority Indicator removed from here */}
                     </div>
 
                     <ul className="space-y-1 my-2">{checklist.map(item => <ChecklistItem key={item.id} item={item} onUpdate={handleItemUpdate} onDelete={handleItemDelete} />)}</ul>
@@ -526,8 +616,28 @@
 
                     {/* --- Tagging UI --- */}
                     <div className="mt-3 pt-2 border-t border-slate-700/50">
-                        <div className="flex flex-wrap gap-2">
-                            {(task.tags || []).map(tag => (
+                        <div className="flex flex-wrap items-center gap-1 mb-2">
+                            <span className="text-xs text-slate-400">Priority:</span> {/* Removed mr-2, gap will handle spacing */}
+                            {DISPLAY_PRIORITY_ORDER.map(pTag => ( /* Use DISPLAY_PRIORITY_ORDER for consistent button order */
+                                <Tooltip key={pTag} text={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}>
+                                    <button 
+                                        onClick={() => handleSetPriorityTag(pTag)}
+                                        className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0`} /* Removed mr-1 mb-1, added flex-shrink-0 */
+                                    >
+                                        {PRIORITY_CONFIG[pTag].title}
+                                    </button>
+                                </Tooltip>
+                            ))}
+                            <Tooltip text="Clear priority (Unprioritized)">
+                                <button onClick={() => handleSetPriorityTag(null)} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
+                                    Clear
+                                </button>
+                            </Tooltip>
+                        </div>
+                        </div>
+                    <div className="mt-3 pt-2 border-t border-slate-700/50"> {/* This is the start of the custom tags section, unchanged by this request */}
+                        <div className="flex flex-wrap gap-2 mb-2"> {/* Added mb-2 for spacing before input */}
+                            {(task.tags || []).filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).map(tag => (
                                 <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
                                     {tag}
                                     <Tooltip text={`Remove tag: ${tag}`}>
@@ -536,7 +646,7 @@
                                 </span>
                             ))}
                         </div>
-                        <div className="flex mt-2">
+                        <div className="flex"> {/* Removed mt-2 as mb-2 was added above */}
                             <input
                                 list="tag-suggestions"
                                 type="text"
@@ -619,21 +729,28 @@
 
     // --- Main Presentation Component ---
     const App = () => {
-        const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask, updateTask, clearArchive } = useAppContext();
+        const { 
+            tasks, addTask, archiveTask, 
+            settings, setSettings, 
+            taskToClose, setTaskToClose, 
+            taskToUnarchive, setTaskToUnarchive, 
+            taskToDelete, setTaskToDelete, 
+            allTags, deleteTask, updateTask, clearArchive, // Core data functions
+            activeTags, setActiveTags,                     // Filter state
+            activeSwimlanes, setActiveSwimlanes,           // Swimlane visibility state
+            collapsedTagSwimlanes, toggleSwimlaneCollapse, // Swimlane collapse state & toggle fn
+            collapsedColumns, setCollapsedColumns          // Fixed column collapse state & setter
+        } = useAppContext();
+
+
+
         const now = useNow(); // Get current time, updates every second
 
         const [showArchived, setShowArchived] = useState(false);
-        const [collapsedColumns, setCollapsedColumns] = useState(() => 
-            DISPLAY_PRIORITY_ORDER.reduce((acc, priority) => {
-                acc[priority] = false;
-                return acc;
-            }, {})
-        );
+        // const [collapsedColumns, setCollapsedColumns] = useState({ 'new-tasks': false }); // MOVED to AppProvider
         const [showSettings, setShowSettings] = useState(false);
-        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({});
+        // const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved to AppProvider
         const [clockTimezone, setClockTimezone] = useState('EST');
-        const [activeTags, setActiveTags] = useState([]);
-        const [tagSwimlanes, setTagSwimlanes] = useState([]);
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
         const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
 
@@ -680,16 +797,14 @@
             clearArchive();
             setShowClearArchiveConfirm(false);
             // Optionally, could switch back to viewing active tasks: setShowArchived(false);
-        }, [clearArchive]);
-        
-        const handleToggleTagCollapse = useCallback((tag) => {
-            setCollapsedTagSwimlanes(prev => ({
-                ...prev,
-                [tag]: !prev[tag] // Toggle the specific tag's collapsed state
-            }));
-        }, []); // setCollapsedTagSwimlanes is stable
+        }, [clearArchive]); // toggleSwimlaneCollapse is now from context
 
-        const handleAddTask = (priority) => { addTask(priority); setCollapsedColumns(p => ({ ...p, [priority]: false })); };
+        const handleAddTask = () => { 
+            addTask(); // Uses defaults: 'New Task' title, null priority, empty tags
+            // No specific column needs to be expanded by default for unprioritized tasks,
+            // unless you have a dedicated "Unprioritized" column and want to expand it.
+            // For now, let's assume the "Triage" column will be visible by default if it has tasks.
+        };
         const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
         const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
         const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
@@ -700,12 +815,37 @@
         };
 
         // Effect to remove swimlanes if their tags are no longer in allTags (e.g., all tasks with that tag were archived)
+        // Or if a priority swimlane's corresponding priority tag is removed from allTags
         useEffect(() => {
-            setTagSwimlanes(currentSwimlanes =>
-                currentSwimlanes.filter(swimlaneTag => allTags.includes(swimlaneTag))
+            setActiveSwimlanes(currentActiveSwimlanes =>
+                currentActiveSwimlanes.filter(swimlaneTag => allTags.includes(swimlaneTag))
             );
-        }, [allTags]); // Intentionally not including setTagSwimlanes as it's stable
+        }, [allTags, setActiveSwimlanes]);
         
+        // Effect to automatically hide empty swimlanes if autoCollapse is enabled
+        useEffect(() => {
+            if (settings.autoCollapse) {
+                // Use the functional update form of setActiveSwimlanes
+                // to get the latest activeSwimlanes without adding it to dependencies,
+                // and to conditionally update only if changes are needed.
+                setActiveSwimlanes(currentActiveSwimlanes => {
+                    const emptyActiveSwimlanesInThisRun = currentActiveSwimlanes.filter(swimlaneName => {
+                        const tasksInSwimlane = swimlaneTasks[swimlaneName] || []; // swimlaneTasks is from the outer scope, captured at effect run time
+                        return tasksInSwimlane.length === 0;
+                    });
+
+                    if (emptyActiveSwimlanesInThisRun.length > 0) {
+                        const nextActiveSwimlanes = currentActiveSwimlanes.filter(name => !emptyActiveSwimlanesInThisRun.includes(name));
+                        // Only return a new array if it's actually different to prevent unnecessary re-renders/loops
+                        if (nextActiveSwimlanes.length !== currentActiveSwimlanes.length) {
+                            return nextActiveSwimlanes;
+                        }
+                    }
+                    return currentActiveSwimlanes; // No change needed
+                });
+            }
+        }, [swimlaneTasks, settings.autoCollapse, setActiveSwimlanes]); // Dependencies: swimlaneTasks, autoCollapse setting, and the stable setter.
+
         const handleTagFilterClick = (tag) => {
             setActiveTags(prev => {
                 if (prev.includes(tag)) {
@@ -718,45 +858,54 @@
 
         const clearTagFilter = () => setActiveTags([]);
 
-        const filteredTasks = useMemo(() => {
-            if (activeTags.length === 0) {
-                return currentTasks;
-            }
-            return currentTasks.filter(task => {
-                if (!task.tags || task.tags.length === 0) return false;
-                return activeTags.every(activeTag => task.tags.includes(activeTag));
-            });
-        }, [currentTasks, activeTags]);
-        
-        const { swimlaneTasks, priorityTasks } = useMemo(() => {
-            const st = {};
-            const pt = [];
+        const filteredTasksByTagsAndPriority = useMemo(() => {
+            if (activeTags.length === 0) return currentTasks;
+            return currentTasks.filter(task =>
+                activeTags.every(activeTag => {
+                    const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag];
+                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag));
+                }) // Closes 'every'
+            ); // Closes 'filter'
+        }, [currentTasks, activeTags]); // Added closing brace for useMemo callback and dependency array
 
-            for (const task of filteredTasks) {
+        const { swimlaneTasks, unclassifiedTasks } = useMemo(() => { // Renamed priorityTasks to unclassifiedTasks
+            const st = {};
+            const ut = []; // unclassifiedTasks
+            for (const task of filteredTasksByTagsAndPriority) {
                 let inSwimlane = false;
-                if(task.tags) {
-                    for (const tag of task.tags) {
-                        if (tagSwimlanes.includes(tag)) {
-                            if (!st[tag]) st[tag] = [];
-                            st[tag].push(task);
-                            inSwimlane = true;
-                        }
+                
+                // Iterate through all active swimlanes.
+                // A task is assigned to the *first* active swimlane whose name is found in the task's tags.
+                // If the swimlane name is a priority display title, check the task's priority field instead.
+                for (const swimlaneName of activeSwimlanes) { 
+                    const isPrioritySwimlane = PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
+                    let matchesSwimlane = false;
+
+                    if (isPrioritySwimlane) {
+                        matchesSwimlane = task.priority === PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
+                    } else {
+                        matchesSwimlane = task.tags && task.tags.includes(swimlaneName);
+                    }
+
+                    if (matchesSwimlane) {
+                        if (!st[swimlaneName]) st[swimlaneName] = [];
+                        st[swimlaneName].push(task);
+                        inSwimlane = true;
+                        break; // Task assigned, move to the next task
                     }
                 }
-                if (!inSwimlane) {
-                    pt.push(task);
-                }
-            }
-            return { swimlaneTasks: st, priorityTasks: pt };
-        }, [filteredTasks, tagSwimlanes]);
 
+                // If the task was not placed in any active swimlane (i.e., no matching tag found),
+                // it goes into the unclassifiedTasks list (rendered in "New Tasks" column),
+                // regardless of its priority value.
+                if (!inSwimlane) {
+                    ut.push(task);
+                }
+            } // PRIORITY_TITLE_TO_CONSTANT_MAP is a global constant, not needed in deps
+            return { swimlaneTasks: st, unclassifiedTasks: ut }; // PRIORITY_TITLE_TO_CONSTANT_MAP is a global constant, not needed in deps
+        }, [filteredTasksByTagsAndPriority, activeSwimlanes]);
         const sortFn = useMemo(() => showArchived ? (a, b) => new Date(b.timestamp) - new Date(a.timestamp) : (a, b) => (a.rank || 0) - (b.rank || 0), [showArchived]);
-        
-        const priorityColumns = useMemo(() => ({
-            [PRIORITIES.HIGH]: priorityTasks.filter(t => t.priority === PRIORITIES.HIGH).sort(sortFn),
-            [PRIORITIES.MEDIUM]: priorityTasks.filter(t => t.priority === PRIORITIES.MEDIUM).sort(sortFn),
-            [PRIORITIES.LOW]: priorityTasks.filter(t => t.priority === PRIORITIES.LOW).sort(sortFn),
-        }), [priorityTasks, sortFn]);
+        // priorityColumns memo is removed as fixed L/M/H columns are gone.
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
         const backgroundOverlayClass = showArchived ? 'bg-red-900/10' : '';
@@ -767,9 +916,8 @@
                 {taskToClose && <CloseoutModal task={taskToClose} onConfirm={handleConfirmCloseout} onCancel={() => setTaskToClose(null)} />}
                 {taskToUnarchive && <UnarchiveModal task={taskToUnarchive} onConfirm={handleConfirmUnarchive} onCancel={() => setTaskToUnarchive(null)} />}
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
-                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
-                {showClearArchiveConfirm && <ClearArchiveConfirmationModal onConfirm={handleConfirmClearArchive} onCancel={() => setShowClearArchiveConfirm(false)} />}
-                {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={tagSwimlanes} setSwimlanes={setTagSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
+                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}                {showClearArchiveConfirm && <ClearArchiveConfirmationModal onConfirm={handleConfirmClearArchive} onCancel={() => setShowClearArchiveConfirm(false)} />}
+                {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={activeSwimlanes} setSwimlanes={setActiveSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
 
                 <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
                     <div className="flex items-center space-x-4">
@@ -794,7 +942,7 @@
                                 <BugIcon />
                             </a>
                         </Tooltip>
-                        <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks"}>
+                        <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks (A)"}>
                             <button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button>
                         </Tooltip>
                         {showArchived && (
@@ -802,103 +950,184 @@
                                 <button onClick={() => setShowClearArchiveConfirm(true)} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all">Clear Archive</button>
                             </Tooltip>
                         )}
-                        <AddTaskDropdown onAddTask={handleAddTask} />
+                        <AddTaskButton onAddTask={handleAddTask} /> 
                     </div>
                 </header>
                 
                 <div className="px-6 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
                     <div className="flex items-center space-x-2 flex-wrap">
                         <Tooltip text="Show all tasks (clear tag filters)">
-                            <button onClick={clearTagFilter}
+                            <button onClick={clearTagFilter} // This button clears all activeTags, including priority titles
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     All
                             </button>
                         </Tooltip>
-                        {allTags.map(tag => (
-                            <Tooltip key={tag} text={`Filter by tag: ${tag}`}>
+                        {/* Render Priority Filter Buttons First in Specific Order */}
+                        {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
+                            const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
+                            return (
+                                <Tooltip key={displayTitle} text={`Filter by priority: ${displayTitle}`}>
+                                    <button 
+                                        onClick={() => handleTagFilterClick(displayTitle)}
+                                        className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}
+                                    >
+                                        {displayTitle}
+                                    </button>
+                                </Tooltip>
+                            );
+                        })}
+                        {/* Render Other Tag Filters (excluding priority display titles) */}
+                        {allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).map(tag => (
+                            <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
                                 <button onClick={() => handleTagFilterClick(tag)}
-                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     {tag}
                                 </button>
                             </Tooltip>
                         ))}
                     </div>
-                    <Tooltip text="Configure tag-based swimlane columns">
+                    <Tooltip text="Configure custom tag-based swimlane columns">
                         <button onClick={() => setShowSwimlaneModal(true)} className="text-sm text-slate-400 hover:text-white bg-slate-700/50 px-3 py-1 rounded-md">Manage Swimlanes</button>
                     </Tooltip>
                 </div>
 
                 <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
-                    {/* Tag Swimlanes */}
-                    {tagSwimlanes.map(tag => {
-                        const tasksForThisTag = swimlaneTasks[tag] || [];
-                        const isManuallyCollapsed = collapsedTagSwimlanes[tag] || false;
-                        // Determine effective collapsed state based on auto-collapse setting and task count
-                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisTag.length === 0) ? true : isManuallyCollapsed;
+                    {/* --- "New Tasks" Column (replaces Triage) --- */}
+                    {(() => { // This column displays unclassifiedTasks
+                        const newTasksToDisplay = unclassifiedTasks.sort(sortFn);
+                        const isEffectivelyCollapsed = (settings.autoCollapse && newTasksToDisplay.length === 0) ? true : (collapsedColumns['new-tasks'] || false);
 
+                        if (newTasksToDisplay.length > 0 || !settings.autoCollapse || (settings.autoCollapse && !isEffectivelyCollapsed) ) {
+                            return (
+                                <PriorityColumn
+                                    key="triage-column"
+                                    titleOverride="New Tasks" // New prop to set a custom title
+                                    priority={null} // Base styling on unprioritized, but title is overridden
+                                    tasks={newTasksToDisplay}
+                                    isCollapsed={isEffectivelyCollapsed}
+                                    onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'new-tasks': !p['new-tasks'] }))}
+                                    showArchived={showArchived}
+                                    isVerticalLayout={settings.verticalLayout}
+                                    clockTimezone={clockTimezone}
+                                    isSwimlane={false} // Indicate this is a primary column
+                                /> );
+                        } return null;
+                    })()}
+                    {activeSwimlanes.map(item => { // Iterate over all active swimlanes (tags or priority display titles)
+                        const tasksForThisSwimlane = swimlaneTasks[item] || [];
+                        const isManuallyCollapsed = collapsedTagSwimlanes[item] || false;
+                        // Determine effective collapsed state based on auto-collapse setting and task count
+                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
+
+                        // All active swimlanes (including those named "High", "Medium", "Low")
+                        // will now be rendered by TagColumn.
+                        // The "New Tasks" column is handled separately above using PriorityColumn.
                         return (
                             <TagColumn 
-                                key={tag} 
-                                tag={tag} 
-                                tasks={tasksForThisTag} 
+                                key={item} 
+                                tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
+                                tasks={tasksForThisSwimlane} 
                                 clockTimezone={clockTimezone}
-                                isCollapsed={isEffectivelyCollapsed} // Use effective state
-                                onToggleCollapse={() => handleToggleTagCollapse(tag)} // Manual toggle still updates manual state
+                                isCollapsed={isEffectivelyCollapsed}
+                                onToggleCollapse={() => toggleSwimlaneCollapse(item)}
                                 isVerticalLayout={settings.verticalLayout} />
                         );
                     })}
-                    {/* Priority Columns */}
-                    {DISPLAY_PRIORITY_ORDER.map(priority => {
-                        const tasksForThisPriority = priorityColumns[priority];
-                        const isManuallyCollapsed = collapsedColumns[priority];
-                        // Determine effective collapsed state
-                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisPriority.length === 0) ? true : isManuallyCollapsed;
-
-                        return (
-                            <PriorityColumn 
-                                key={priority}
-                                priority={priority} 
-                                tasks={tasksForThisPriority} 
-                                isCollapsed={isEffectivelyCollapsed} // Use effective state
-                                onToggleCollapse={() => setCollapsedColumns(p => ({...p, [priority]: !p[priority]}))} // Manual toggle
-                                showArchived={showArchived} 
-                                isVerticalLayout={settings.verticalLayout} 
-                                clockTimezone={clockTimezone} />
-                        );
-                    })}
+                    {/* Default Priority Columns are removed. They are now handled as selectable swimlanes if their tags exist. */}
                 </main>
             </div>
         );
     };
 
     // --- Column & Modal Components ---
-    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
+    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null }) => {
+        const { addTask } = useAppContext();
+        const [showQuickAdd, setShowQuickAdd] = useState(false);
+        const [quickAddTitle, setQuickAddTitle] = useState('');
+
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
-        const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG[PRIORITIES.LOW];
+        const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.null; // 'priority' can be PRIORITIES.LOW or null
+
+        let displayTitleText = titleOverride || config.title;
+        // If it's a swimlane, not the "New Tasks" (titleOverride) column, and it's a configured priority (not "Unprioritized")
+        if (isSwimlane && !titleOverride && config.title !== PRIORITY_CONFIG.null.title) {
+            displayTitleText = `${config.title} Priority`;
+        }
+
+        const headerColorClass = titleOverride ? (isSwimlane ? 'text-slate-300' : 'text-slate-200') : config.color; // Generic color for "New Tasks", specific for priorities
+
+
         const headerContent = (
             <>
-                <span>{config.title} Priority ({tasks.length})</span>
+                <span className="truncate">{displayTitleText} ({tasks.length})</span>
                 {isVerticalLayout && ( // Only show chevron in vertical mode
                     <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
                 )}
             </>
         );
+        
+        const handleQuickAddTask = () => {
+            if (!quickAddTitle.trim()) {
+                setShowQuickAdd(false); // Hide if title is empty
+                setQuickAddTitle('');
+                return;
+            }
+
+            let taskPriorityToAdd = null;
+            let taskTagsToAdd = [];
+
+            if (titleOverride) { // "New Tasks" column
+                taskPriorityToAdd = null;
+                taskTagsToAdd = [];
+            } else if (priority) { // Priority swimlane
+                taskPriorityToAdd = priority; // The actual priority constant like PRIORITIES.LOW
+                taskTagsToAdd = [PRIORITY_CONFIG[priority].title]; // The display title like "Low"
+            }
+            
+            addTask(quickAddTitle.trim(), taskPriorityToAdd, taskTagsToAdd);
+            setQuickAddTitle('');
+            setShowQuickAdd(false); // Optionally keep it open: setShowQuickAdd(true);
+        };
+
 
         return (
-            <div className={`flex flex-col bg-slate-900/30 rounded-lg ${columnLayoutClasses}`}>
+            <div className={`flex flex-col rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button 
                             onClick={onToggleCollapse} 
-                            className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${config.color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}
+                            className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70 hover:bg-slate-700/70' : (titleOverride ? 'bg-slate-700/60 hover:bg-slate-600/60' : 'hover:bg-slate-700/50')} flex-shrink-0 transition-colors`}
                         >
-                            {headerContent}
+                            <div className="flex-grow min-w-0">{headerContent}</div>
+                            {!isCollapsed && !showQuickAdd && (
+                                <Tooltip text={`Quick add to ${displayTitleText}`}>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setShowQuickAdd(true); }} 
+                                        className="ml-2 p-1 rounded-full hover:bg-slate-600/50 flex-shrink-0"
+                                    >
+                                        <PlusIcon />
+                                    </button>
+                                </Tooltip>
+                            )}
                         </button>
                     </Tooltip>
                 ) : ( // Static header for horizontal layout
-                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${config.color} bg-slate-900/60 flex-shrink-0`}>
-                        {headerContent} {/* Chevron will be hidden by isVerticalLayout condition inside headerContent */}
+                    <div className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70' : (titleOverride ? 'bg-slate-700/60' : 'bg-slate-900/60')} flex-shrink-0`}>
+                        <div className="flex-grow min-w-0">{headerContent}</div>
+                        {!showQuickAdd && (
+                             <Tooltip text={`Quick add to ${displayTitleText}`}>
+                                <button 
+                                    onClick={() => setShowQuickAdd(true)} 
+                                    className="ml-2 p-1 rounded-full hover:bg-slate-600/50 flex-shrink-0"
+                                >
+                                    <PlusIcon />
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
+                )}
+                {showQuickAdd && !isCollapsed && (
+                    <QuickAddInputForm onAdd={handleQuickAddTask} title={quickAddTitle} setTitle={setQuickAddTitle} onCancel={() => { setShowQuickAdd(false); setQuickAddTitle(''); }} />
                 )}
                 <div className={`
                     flex-grow p-2 transition-all duration-300 ease-in-out overflow-x-hidden
@@ -918,14 +1147,36 @@
     });
 
     const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout }) => {
+        const { addTask } = useAppContext();
+        const [showQuickAdd, setShowQuickAdd] = useState(false);
+        const [quickAddTitle, setQuickAddTitle] = useState('');
+
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
 
         const headerContent = (
             <>
-                <span>{tag} ({tasks.length})</span>
+                <span className="truncate">{tag} ({tasks.length})</span>
                 {isVerticalLayout && <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />} {/* Chevron only in vertical layout */}
             </>
         );
+
+        const handleQuickAddTask = () => {
+            if (!quickAddTitle.trim()) {
+                setShowQuickAdd(false);
+                setQuickAddTitle('');
+                return;
+            }
+
+            const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
+
+            if (priorityConstant) {
+                addTask(quickAddTitle.trim(), priorityConstant, []); // Set priority, no tags
+            } else {
+                addTask(quickAddTitle.trim(), null, [tag]); // Null priority, add custom tag
+            }
+            setQuickAddTitle('');
+            setShowQuickAdd(false);
+        };
 
         return (
             <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border border-indigo-800/50 rounded-lg ${columnLayoutClasses}`}>
@@ -933,15 +1184,38 @@
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button
                             onClick={onToggleCollapse}
-                            className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
+                            className="flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
                         >
-                            {headerContent}
+                            <div className="flex-grow min-w-0">{headerContent}</div>
+                            {!isCollapsed && !showQuickAdd && (
+                                <Tooltip text={`Quick add to ${tag}`}>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setShowQuickAdd(true); }} 
+                                        className="ml-2 p-1 rounded-full hover:bg-slate-800/50 flex-shrink-0"
+                                    >
+                                        <PlusIcon />
+                                    </button>
+                                </Tooltip>
+                            )}
                         </button>
                     </Tooltip>
                 ) : (
                     <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0">
-                        {headerContent}
+                        <div className="flex-grow min-w-0">{headerContent}</div>
+                         {!showQuickAdd && (
+                            <Tooltip text={`Quick add to ${tag}`}>
+                                <button 
+                                    onClick={() => setShowQuickAdd(true)} 
+                                    className="ml-2 p-1 rounded-full hover:bg-slate-800/50 flex-shrink-0"
+                                >
+                                    <PlusIcon />
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
+                )}
+                {showQuickAdd && !isCollapsed && (
+                    <QuickAddInputForm onAdd={handleQuickAddTask} title={quickAddTitle} setTitle={setQuickAddTitle} onCancel={() => { setShowQuickAdd(false); setQuickAddTitle(''); }} />
                 )}
                 <div className={`
                     flex-grow p-2 overflow-x-hidden transition-all duration-300 ease-in-out
@@ -960,29 +1234,42 @@
         );
     });
 
-    const AddTaskDropdown = React.memo(({ onAddTask }) => {
-        const [isOpen, setIsOpen] = useState(false);
-        const dropdownRef = useRef(null);
+    const QuickAddInputForm = React.memo(({ onAdd, title, setTitle, onCancel }) => {
+        const inputRef = useRef(null);
         useEffect(() => {
-            const handleClickOutside = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false); };
-            document.addEventListener("mousedown", handleClickOutside);
-            return () => document.removeEventListener("mousedown", handleClickOutside);
+            if (inputRef.current) inputRef.current.focus();
         }, []);
-        const handleSelect = (p) => { onAddTask(p); setIsOpen(false); };
+
         return (
-            <div className="relative" ref={dropdownRef}>
+            <div className="p-2 border-b border-slate-700/50 bg-slate-800/30">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') onAdd(); if (e.key === 'Escape') onCancel(); }}
+                    placeholder="New task title..."
+                    className="w-full bg-slate-900/80 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500"
+                />
+                <div className="mt-2 flex justify-end space-x-2">
+                    <button onClick={onCancel} className="px-3 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded-md">Cancel</button>
+                    <button onClick={onAdd} className="px-3 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded-md">Add Task</button>
+                </div>
+            </div>
+        );
+    });
+
+    const AddTaskButton = React.memo(({ onAddTask }) => {
+        return (
+            <div className="relative">
                 <Tooltip text="Add a new task">
-                    <button onClick={() => setIsOpen(!isOpen)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all">
+                    <button 
+                        onClick={onAddTask} 
+                        className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all"
+                    >
                         + Add Task
                     </button>
                 </Tooltip>
-                {isOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-slate-700 rounded-md shadow-lg z-20">
-                        {DISPLAY_PRIORITY_ORDER.map(priorityKey => (
-                            <button key={priorityKey} onClick={() => handleSelect(priorityKey)} className={`w-full text-left px-4 py-2 text-sm ${PRIORITY_CONFIG[priorityKey].color} hover:bg-slate-600`}>{PRIORITY_CONFIG[priorityKey].title} Priority</button>
-                        ))}
-                    </div>
-                )}
             </div>
         );
     });
@@ -1036,10 +1323,11 @@
 
     const ManageSwimlanesModal = ({ allTags, activeSwimlanes, setSwimlanes, onClose }) => {
         const handleToggle = (tag) => {
-            setSwimlanes(prev => 
+            setSwimlanes(prev =>
                 prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
             );
         };
+        const manageableTags = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).sort();
 
         const doneButton = (
             <Tooltip text="Close swimlane management">
@@ -1050,9 +1338,9 @@
         return (
             <Modal onClose={onClose}>
                 <ModalContent title="Manage Swimlanes" onClose={onClose} headerActions={doneButton}>
-                    <p className="text-sm text-slate-400 mb-4">Select tags to create dedicated columns for them.</p>
-                    <div className="space-y-2"> {/* Removed max-h-60 and overflow-y-auto */}
-                        {allTags.map(tag => (
+                    <p className="text-sm text-slate-400 mb-4">Select custom tags to create dedicated swimlane columns. Priority-based columns are managed by task priority settings, not here.</p>
+                    <div className="space-y-2">
+                        {manageableTags.map(tag => (
                             <div key={tag} className="flex items-center justify-between p-2 bg-slate-700/50 rounded-md">
                                 <label className="text-slate-300">{tag}</label>
                                 <Tooltip text={activeSwimlanes.includes(tag) ? `Disable swimlane for '${tag}'` : `Enable swimlane for '${tag}'`}>
@@ -1062,6 +1350,9 @@
                                 </Tooltip>
                             </div>
                         ))}
+                        {manageableTags.length === 0 && (
+                            <p className="text-sm text-slate-500 italic">No custom tags found to create swimlanes from. Add custom tags to your tasks first.</p>
+                        )}
                     </div>
                     {/* "Done" button is now in the header via headerActions */}
                 </ModalContent>
