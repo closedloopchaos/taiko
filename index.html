@@ -253,14 +253,21 @@
         const formattedDate = time.toLocaleDateString('en-US', { ...dateOptions, timeZone });
 
         return (
-            <div className="flex flex-col items-end text-slate-300">
-                <div className="flex items-baseline space-x-2">
-                    <div className="text-2xl font-mono tracking-wider">{formattedTime}</div>
-                    <button onClick={onTimezoneChange} className="text-xs font-semibold bg-slate-700/50 px-2 py-0.5 rounded-md hover:bg-slate-700 transition-colors" title="Change Timezone">
-                        {timezone}
-                    </button>
+            // This container will center its direct children: time, date, and button
+            <div className="flex flex-col items-center text-slate-300">
+                {/* Time, now clickable and with a hover tooltip for the timezone */}
+                <div 
+                    onClick={onTimezoneChange} 
+                    className="text-4xl font-mono tracking-wider cursor-pointer relative group"
+                    title="Click to change timezone" // Added title attribute for accessibility
+                >
+                    {formattedTime}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap bg-slate-700 text-xs font-mono text-white px-2 py-1 rounded-md shadow-lg pointer-events-none">
+                        Timezone: {timezone}
+                    </div>
                 </div>
-                <div className="text-xs font-sans uppercase tracking-widest text-slate-400">{formattedDate}</div>
+                {/* Date, now a direct child, will be centered below the time */}
+                <div className="text-base font-sans uppercase tracking-widest text-slate-400 mt-1">{formattedDate}</div>
             </div>
         );
     });
@@ -315,22 +322,28 @@
         <li className="flex items-center space-x-2 group">
             <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
             <input type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} />
-            <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            <Tooltip text="Delete item">
+                <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </Tooltip>
         </li>
     ));
 
     const PriorityIndicator = React.memo(({ priority, onClick }) => {
         const priorityStyles = { low: { icon: '▲', color: 'text-sky-400', label: 'Low' }, medium: { icon: '▲▲', color: 'text-yellow-400', label: 'Medium' }, high: { icon: '▲▲▲', color: 'text-red-400', label: 'High' } };
         const current = priorityStyles[priority] || priorityStyles.low;
-        return <button onClick={onClick} className={`flex items-center space-x-1 text-xs font-semibold ${current.color} hover:opacity-75 transition-opacity`} title={`Priority: ${current.label}. Click to change.`}><span>{current.icon}</span></button>;
+        return (
+            <Tooltip text={`Priority: ${current.label}. Click to change.`}>
+                <button onClick={onClick} className={`flex items-center space-x-1 text-xs font-semibold ${current.color} hover:opacity-75 transition-opacity`}><span>{current.icon}</span></button>
+            </Tooltip>
+        );
     });
 
     const Tooltip = ({ text, children }) => (
         <div className="relative group flex items-center">
             {children}
-            <div className="absolute bottom-full mb-2 w-max bg-slate-800 text-white text-xs rounded-md py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none transform -translate-x-1/2 left-1/2 z-30">{text}</div>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap bg-slate-700 text-white text-xs font-mono rounded-md py-1 px-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">{text}</div>
         </div>
     );
 
@@ -339,7 +352,7 @@
         const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete } = useAppContext();
         const now = useNow();
 
-        const [isEditingTitle, setIsEditingTitle] = useState(false);
+        const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
         const [title, setTitle] = useState(task.title);
         const [isSettingReminder, setIsSettingReminder] = useState(false);
         const [reminderInput, setReminderInput] = useState('');
@@ -444,12 +457,22 @@
                 <div className={`w-full py-1 rounded-t-lg ${statusColors[task.status]} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
                 <div className="p-2">
                     <div className="flex justify-between items-start mb-2">
-                        {isEditingTitle ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" /> : <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>}
-                        {!task.archived && <PriorityIndicator priority={task.priority} onClick={handlePriorityChange} />}
+                        {isEditingTitle ? (
+                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" />
+                        ) : (
+                            <Tooltip text="Double-click to edit title">
+                                <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>
+                            </Tooltip>
+                        )}
+                        {!task.archived && (
+                            <PriorityIndicator priority={task.priority} onClick={handlePriorityChange} />
+                        )}
                     </div>
 
                     <ul className="space-y-1 my-2">{checklist.map(item => <ChecklistItem key={item.id} item={item} onUpdate={handleItemUpdate} onDelete={handleItemDelete} />)}</ul>
-                    <button onClick={handleAddItem} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50">+ Add item</button>
+                    <Tooltip text="Add a new checklist item">
+                        <button onClick={handleAddItem} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50">+ Add item</button>
+                    </Tooltip>
 
                     {/* --- Tagging UI --- */}
                     <div className="mt-3 pt-2 border-t border-slate-700/50">
@@ -457,7 +480,9 @@
                             {(task.tags || []).map(tag => (
                                 <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
                                     {tag}
-                                    <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
+                                    <Tooltip text={`Remove tag: ${tag}`}>
+                                        <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
+                                    </Tooltip>
                                 </span>
                             ))}
                         </div>
@@ -473,7 +498,9 @@
                             <datalist id="tag-suggestions">
                                 {allTags.map(tag => <option key={tag} value={tag} />)}
                             </datalist>
-                            <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 rounded-md hover:bg-sky-500">Add</button>
+                            <Tooltip text="Add this tag to the task">
+                                <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 rounded-md hover:bg-sky-500">Add</button>
+                            </Tooltip>
                         </div>
                     </div>
 
@@ -485,7 +512,9 @@
                                 onChange={e => setReminderInput(e.target.value)} 
                                 autoFocus 
                                 placeholder="Set in: MM:SS / SS"                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 flex-1 min-w-0"/>
-                            <button onClick={handleSetReminder} className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
+                            <Tooltip text="Set reminder from input">
+                                <button onClick={handleSetReminder} className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
+                            </Tooltip>
                         </div>
                     )}
                     {task.reminderAt && !isSettingReminder && (
@@ -497,20 +526,36 @@
                                         hour: '2-digit', minute:'2-digit', second: '2-digit'
                                     })} {clockTimezone}
                                 </span>
-                                <button onClick={() => updateTask(task.id, { reminderAt: null, reminderFired: false })} className="text-red-400 hover:text-red-300 text-xs">(clear)</button>
+                                <Tooltip text="Clear reminder">
+                                    <button onClick={() => updateTask(task.id, { reminderAt: null, reminderFired: false })} className="text-red-400 hover:text-red-300 text-xs">(clear)</button>
+                                </Tooltip>
                             </div>
                             <ReminderCountdown reminderAt={task.reminderAt} />
                         </div>
                     )}
                     <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between items-center">
                         <div className="flex items-center space-x-2">
-                            {!task.archived && task.status === 'To Do' && !task.totalElapsedTimeInSeconds && <button onClick={statusActions['To Do']} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>}
+                            {!task.archived && task.status === 'To Do' && !task.totalElapsedTimeInSeconds && (
+                                <Tooltip text="Start working on this task">
+                                    <button onClick={statusActions['To Do']} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>
+                                </Tooltip>
+                            )}
                             {(task.status !== 'To Do' || task.totalElapsedTimeInSeconds > 0) && <TimeElapsed startTime={task.startedAt} totalElapsedSeconds={task.totalElapsedTimeInSeconds || 0} />}
-                            {!task.archived && task.status === 'In Progress' && task.startedAt && <button onClick={statusActions['In Progress']} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>}
-                            {!task.archived && (task.status === 'On Hold' || (task.status === 'To Do' && task.totalElapsedTimeInSeconds > 0)) && <button onClick={statusActions['On Hold']} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>}
+                            {!task.archived && task.status === 'In Progress' && task.startedAt && (
+                                <Tooltip text="Pause task timer">
+                                    <button onClick={statusActions['In Progress']} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>
+                                </Tooltip>
+                            )}
+                            {!task.archived && (task.status === 'On Hold' || (task.status === 'To Do' && task.totalElapsedTimeInSeconds > 0)) && (
+                                <Tooltip text="Resume working on this task">
+                                    <button onClick={statusActions['On Hold']} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>
+                                </Tooltip>
+                            )}
                         </div>
                         <div className="flex items-center space-x-2">
-                            <Tooltip text="Set Reminder"><button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.archived} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button></Tooltip>
+                            <Tooltip text={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"}>
+                                <button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.archived} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
+                            </Tooltip>
                             <Tooltip text={task.archived ? "Restore" : "Archive"}><button onClick={() => archiveTask(task.id, !task.archived)} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700">{task.archived ? <RestoreIcon /> : <ArchiveIcon />}</button></Tooltip>
                             <Tooltip text="Delete Permanently"><button onClick={handleDeleteRequest} className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button></Tooltip>
                         </div>
@@ -520,6 +565,7 @@
         );
     };
     const MemoizedTaskCard = React.memo(TaskCard);
+
 
     // --- Main Presentation Component ---
     const App = () => {
@@ -674,36 +720,49 @@
                     <div className="flex items-center space-x-4">
                         <TaikoLogo />
                         <div>
-                            <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em', paddingLeft: '0.2em' }}>Taiko</h1>
+                            <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1> {/* Removed paddingLeft for alignment */}
                             <p className="text-slate-400 text-sm">Operations Task Manager</p>
                         </div>
                     </div>
                     <div className="flex-grow flex items-center justify-center min-w-[300px] my-2 md:my-0"><LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} /></div>
                     <div className="flex items-center space-x-4">
-                        <Tooltip text="Settings"><button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button></Tooltip>
-                        <Tooltip text="Toggle Focus Mode"><button onClick={handleFocusClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 transition-all ${isFocusMode ? 'bg-purple-600 hover:bg-purple-500 focus:ring-purple-400' : 'bg-slate-700 hover:bg-slate-600 focus:ring-slate-500'}`}>{isFocusMode ? 'Exit Focus' : 'Focus Mode'}</button></Tooltip>
-                        <Tooltip text="View Archived Tasks"><button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button></Tooltip>
+                        <Tooltip text="Settings">
+                            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
+                        </Tooltip>
+                        <Tooltip text={isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"}>
+                            <button onClick={handleFocusClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 transition-all ${isFocusMode ? 'bg-purple-600 hover:bg-purple-500 focus:ring-purple-400' : 'bg-slate-700 hover:bg-slate-600 focus:ring-slate-500'}`}>{isFocusMode ? 'Exit Focus' : 'Focus Mode'}</button>
+                        </Tooltip>
+                        <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks"}>
+                            <button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button>
+                        </Tooltip>
                         <AddTaskDropdown onAddTask={handleAddTask} />
                     </div>
                 </header>
                 
                 <div className="px-6 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
                     <div className="flex items-center space-x-2 flex-wrap">
-                        <button onClick={clearTagFilter}
-                                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                All
-                        </button>
-                        {allTags.map(tag => (
-                            <button key={tag} onClick={() => handleTagFilterClick(tag)}
-                                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                {tag}
+                        <Tooltip text="Show all tasks (clear tag filters)">
+                            <button onClick={clearTagFilter}
+                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                    All
                             </button>
+                        </Tooltip>
+                        {allTags.map(tag => (
+                            <Tooltip key={tag} text={`Filter by tag: ${tag}`}>
+                                <button onClick={() => handleTagFilterClick(tag)}
+                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                    {tag}
+                                </button>
+                            </Tooltip>
                         ))}
                     </div>
-                    <button onClick={() => setShowSwimlaneModal(true)} className="text-sm text-slate-400 hover:text-white bg-slate-700/50 px-3 py-1 rounded-md">Manage Swimlanes</button>
+                    <Tooltip text="Configure tag-based swimlane columns">
+                        <button onClick={() => setShowSwimlaneModal(true)} className="text-sm text-slate-400 hover:text-white bg-slate-700/50 px-3 py-1 rounded-md">Manage Swimlanes</button>
+                    </Tooltip>
                 </div>
 
                 <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
+                    {/* Tag Swimlanes */}
                     {tagSwimlanes.map(tag => {
                         const tasksForThisTag = swimlaneTasks[tag] || [];
                         const isManuallyCollapsed = collapsedTagSwimlanes[tag] || false;
@@ -721,6 +780,7 @@
                                 isVerticalLayout={settings.verticalLayout} />
                         );
                     })}
+                    {/* Priority Columns */}
                     {['high', 'medium', 'low'].map(priority => {
                         const tasksForThisPriority = priorityColumns[priority];
                         const isManuallyCollapsed = collapsedColumns[priority];
@@ -761,11 +821,16 @@
 
         return (
             <div className={`flex flex-col bg-slate-900/30 rounded-lg ${columnLayoutClasses}`}>
-                {isVerticalLayout ? (
-                    <button onClick={onToggleCollapse} className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}>
-                        {headerContent}
-                    </button>
-                ) : (
+                {isVerticalLayout ? ( // Clickable header for vertical layout
+                    <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
+                        <button 
+                            onClick={onToggleCollapse} 
+                            className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}
+                        >
+                            {headerContent}
+                        </button>
+                    </Tooltip>
+                ) : ( // Static header for horizontal layout
                     <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} bg-slate-900/60 flex-shrink-0`}>
                         {headerContent} {/* Chevron will be hidden by isVerticalLayout condition inside headerContent */}
                     </div>
@@ -799,13 +864,15 @@
 
         return (
             <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border border-indigo-800/50 rounded-lg ${columnLayoutClasses}`}>
-                {isVerticalLayout ? (
-                    <button
-                        onClick={onToggleCollapse}
-                        className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
-                    >
-                        {headerContent}
-                    </button>
+                {isVerticalLayout ? ( // Clickable header for vertical layout
+                    <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
+                        <button
+                            onClick={onToggleCollapse}
+                            className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
+                        >
+                            {headerContent}
+                        </button>
+                    </Tooltip>
                 ) : (
                     <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0">
                         {headerContent}
@@ -839,7 +906,11 @@
         const handleSelect = (p) => { onAddTask(p); setIsOpen(false); };
         return (
             <div className="relative" ref={dropdownRef}>
-                <button onClick={() => setIsOpen(!isOpen)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all">+ Add Task</button>
+                <Tooltip text="Add a new task">
+                    <button onClick={() => setIsOpen(!isOpen)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all">
+                        + Add Task
+                    </button>
+                </Tooltip>
                 {isOpen && <div className="absolute right-0 mt-2 w-48 bg-slate-700 rounded-md shadow-lg z-20"><button onClick={() => handleSelect('high')} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-slate-600">High Priority</button><button onClick={() => handleSelect('medium')} className="w-full text-left px-4 py-2 text-sm text-yellow-400 hover:bg-slate-600">Medium Priority</button><button onClick={() => handleSelect('low')} className="w-full text-left px-4 py-2 text-sm text-sky-400 hover:bg-slate-600">Low Priority</button></div>}
             </div>
         );
@@ -853,17 +924,32 @@
         </div>
     );
     const CloseoutModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Task Complete!</h3><p className="text-slate-300 mb-4">Would you like to archive the task "{task.title}"?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Keep Active</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Archive Task</button></div></div></Modal>;
-    const UnarchiveModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Unarchive Task?</h3><p className="text-slate-300 mb-4">You've made a change to an archived task. Would you like to move "{task.title}" back to the active board?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">No, Keep Archived</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Yes, Unarchive</button></div></div></Modal>;
-    const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
+    const UnarchiveModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Unarchive Task?</h3><p className="text-slate-300 mb-4">You've made a change to an archived task. Would you like to move "{task.title}" back to the active board?</p><div className="flex justify-center space-x-4"><Tooltip text="Keep the task archived"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">No, Keep Archived</button></Tooltip><Tooltip text="Move task to active board"><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Yes, Unarchive</button></Tooltip></div></div></Modal>;
+    const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         return ( 
             <Modal onClose={onClose}>
                 <ModalContent title="Settings" onClose={onClose}>
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between"><label className="text-slate-300">Confirm on Delete</label><button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
-                        <div className="flex items-center justify-between"><label className="text-slate-300">Auto-collapse Empty Columns</label><button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
-                        <div className="flex items-center justify-between"><label className="text-slate-300">Stack Columns Vertically</label><button onClick={() => handleToggle('verticalLayout')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.verticalLayout ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.verticalLayout ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-slate-300">Confirm on Delete</label>
+                            <Tooltip text={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"}>
+                                <button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </Tooltip>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-slate-300">Auto-collapse Empty Columns</label>
+                            <Tooltip text={settings.autoCollapse ? "Disable auto-collapse" : "Enable auto-collapse"}>
+                                <button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </Tooltip>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-slate-300">Stack Columns Vertically</label>
+                            <Tooltip text={settings.verticalLayout ? "Switch to horizontal layout" : "Switch to vertical layout"}>
+                                <button onClick={() => handleToggle('verticalLayout')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.verticalLayout ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.verticalLayout ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </Tooltip>
+                        </div>
                     </div>
                 </ModalContent>
             </Modal> 
@@ -885,14 +971,18 @@
                         {allTags.map(tag => (
                             <div key={tag} className="flex items-center justify-between p-2 bg-slate-700/50 rounded-md">
                                 <label className="text-slate-300">{tag}</label>
-                                <button onClick={() => handleToggle(tag)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${activeSwimlanes.includes(tag) ? 'bg-indigo-500' : 'bg-slate-600'}`}>
-                                    <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${activeSwimlanes.includes(tag) ? 'translate-x-6' : 'translate-x-1'}`} />
-                                </button>
+                                <Tooltip text={activeSwimlanes.includes(tag) ? `Disable swimlane for '${tag}'` : `Enable swimlane for '${tag}'`}>
+                                    <button onClick={() => handleToggle(tag)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${activeSwimlanes.includes(tag) ? 'bg-indigo-500' : 'bg-slate-600'}`}>
+                                        <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${activeSwimlanes.includes(tag) ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    </button>
+                                </Tooltip>
                             </div>
                         ))}
                     </div>
                     <div className="mt-6 text-right">
-                        <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Done</button>
+                        <Tooltip text="Close swimlane management">
+                            <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Done</button>
+                        </Tooltip>
                     </div>
                 </ModalContent>
             </Modal>
