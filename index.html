@@ -71,6 +71,7 @@
     };
 
     // PRIORITY_CONFIG must be defined after PRIORITIES and before constants that use it.
+    // We will add sound generation parameters here later if needed, or handle in the playSound function.
     const PRIORITY_CONFIG = {
         [PRIORITIES.LOW]: { title: "Low", color: "text-sky-400", bgColor: "bg-sky-500/20", borderColor: "border-sky-500", pulseClass: 'pulse-border-low' },
         [PRIORITIES.MEDIUM]: { title: "Medium", color: "text-yellow-400", bgColor: "bg-yellow-500/20", borderColor: "border-yellow-500", pulseClass: 'pulse-border-medium' },
@@ -90,6 +91,38 @@
     const TIMEZONE_MAP = { EST: 'America/New_York', PST: 'America/Los_Angeles', UTC: 'UTC' };
     const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
     const TASK_STATUS_CONFIG = { [TASK_STATUS.TO_DO]: { color: 'bg-sky-500', label: 'To Do' }, [TASK_STATUS.IN_PROGRESS]: { color: 'bg-yellow-500', label: 'In Progress' }, [TASK_STATUS.ON_HOLD]: { color: 'bg-slate-500', label: 'On Hold' }, [TASK_STATUS.DONE]: { color: 'bg-green-500', label: 'Done' } };
+
+    // --- Web Audio API Sound Generation ---
+    let audioContext = null;
+    const getAudioContext = () => {
+        if (!audioContext && (window.AudioContext || window.webkitAudioContext)) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioContext;
+    };
+
+    const playTone = (frequency, duration = 0.5, type = 'sine', volume = 0.3) => {
+        const actx = getAudioContext();
+        if (!actx) {
+            console.warn("Web Audio API is not supported in this browser.");
+            return;
+        }
+
+        const oscillator = actx.createOscillator();
+        const gainNode = actx.createGain();
+
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, actx.currentTime);
+        gainNode.gain.setValueAtTime(volume, actx.currentTime);
+        // Simple fade out to avoid clicking
+        gainNode.gain.linearRampToValueAtTime(0.0001, actx.currentTime + duration - 0.05);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(actx.destination);
+
+        oscillator.start();
+        oscillator.stop(actx.currentTime + duration);
+    };
 
     // --- Context for State Management ---
     const AppContext = createContext(null);
@@ -832,10 +865,25 @@
                         // icon: 'your_icon.png' // Optional: Add an icon URL here
                     });
                     updateTask(task.id, { reminderFired: true });
+
+                    // Play sound based on priority
+                    switch (task.priority) {
+                        case PRIORITIES.HIGH:
+                            playTone(880, 0.6, 'sawtooth', 0.4); // Higher pitch, slightly harsher, louder
+                            setTimeout(() => playTone(880, 0.3, 'sawtooth', 0.4), 150); // Quick second beep
+                            break;
+                        case PRIORITIES.MEDIUM:
+                            playTone(660, 0.8, 'square', 0.35); // Medium pitch
+                            break;
+                        case PRIORITIES.LOW:
+                            playTone(440, 1.0, 'sine', 0.3); // Lower pitch, softer
+                            break;
+                        default: // Unprioritized or null
+                            playTone(523, 0.7, 'sine', 0.25); // A general C5 note
+                    }
                 }
             });
         }, [tasks, now, updateTask]);
-
 
         const handleConfirmDelete = useCallback(() => {
             if (!taskToDelete) return;
