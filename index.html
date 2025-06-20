@@ -29,6 +29,11 @@
             0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); } 
             50% { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0); } 
         }
+        .pulse-border-default { animation: pulse-border-default 2s infinite; }
+        @keyframes pulse-border-default { 
+            0%, 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.7); } /* slate-500 like for default pulse */
+            50% { box-shadow: 0 0 0 5px rgba(100, 116, 139, 0); } 
+        }
     </style>
 </head>
 <body>
@@ -70,7 +75,7 @@
         [PRIORITIES.LOW]: { title: "Low", color: "text-sky-400", bgColor: "bg-sky-500/20", borderColor: "border-sky-500", pulseClass: 'pulse-border-low' },
         [PRIORITIES.MEDIUM]: { title: "Medium", color: "text-yellow-400", bgColor: "bg-yellow-500/20", borderColor: "border-yellow-500", pulseClass: 'pulse-border-medium' },
         [PRIORITIES.HIGH]: { title: "High", color: "text-red-400", bgColor: "bg-red-500/20", borderColor: "border-red-500", pulseClass: 'pulse-border-high' },
-        null: { title: "Unprioritized", color: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-600", pulseClass: '' } // For null priority
+        null: { title: "Unprioritized", color: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-600", pulseClass: 'pulse-border-default' } // For null priority
     };
 
     // Now define constants that depend on PRIORITIES and PRIORITY_CONFIG
@@ -599,7 +604,9 @@
             [TASK_STATUS.ON_HOLD]: () => updateTask(task.id, { status: TASK_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() }),
         };
 
-        const reminderIsDue = task.reminderAt && !task.reminderFired && now > new Date(task.reminderAt);
+        // Pulse should continue as long as the reminder time has passed,
+        // regardless of whether the notification itself has fired.
+        const reminderIsDue = task.reminderAt && new Date(task.reminderAt) <= now;
         const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || '') : '';
 
         return (
