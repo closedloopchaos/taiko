@@ -557,8 +557,27 @@
         };
 
         const handleRemoveTag = (tagToRemove) => {
+            const currentTags = task.tags || [];
             const newTags = (task.tags || []).filter(tag => tag !== tagToRemove);
             updateTask(task.id, { tags: newTags });
+
+            // After removing the tag, check if the task still has tags.
+            // If it does, find the first remaining tag that corresponds to a potential swimlane
+            // (either a priority display title or a custom tag) and ensure that swimlane
+            // is active and expanded. This helps guide the task to a relevant column.
+            
+            // Find the first remaining tag that is either a priority display title or a custom tag
+            const firstRemainingPotentialSwimlaneTag = newTags.find(tag => 
+                PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag) || allTags.includes(tag) // Check if it's a known tag/priority
+            );
+
+            if (firstRemainingPotentialSwimlaneTag) {
+                 // Ensure this potential swimlane is active and expanded
+                 setActiveSwimlanes(prevActiveSwimlanes => {
+                    expandSwimlane(firstRemainingPotentialSwimlaneTag); // Expand it
+                    return prevActiveSwimlanes.includes(firstRemainingPotentialSwimlaneTag) ? prevActiveSwimlanes : [...prevActiveSwimlanes, firstRemainingPotentialSwimlaneTag]; // Add to active if not already
+                 });
+            }
         };
 
         const handleSetReminder = useCallback(() => {
