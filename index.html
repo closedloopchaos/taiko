@@ -224,11 +224,40 @@
         return totalSeconds > 0 ? totalSeconds : null;
     };
 
-    // --- Global Constants ---
+    // --- Global Constants & Configurations ---
+    const PRIORITIES = {
+        LOW: 'low',
+        MEDIUM: 'medium',
+        HIGH: 'high'
+    };
+    const PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For internal logic if specific order needed
+    const DISPLAY_PRIORITY_ORDER = [PRIORITIES.HIGH, PRIORITIES.MEDIUM, PRIORITIES.LOW]; // For UI column display
+
+    const TASK_STATUS = {
+        TO_DO: 'To Do',
+        IN_PROGRESS: 'In Progress',
+        ON_HOLD: 'On Hold',
+        DONE: 'Done'
+    };
+
     const TIMEZONE_MAP = {
         EST: 'America/New_York',
         PST: 'America/Los_Angeles',
         UTC: 'UTC'
+    };
+    const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
+
+    const PRIORITY_CONFIG = {
+        [PRIORITIES.LOW]: { title: "Low", color: "text-sky-400", icon: '▲', label: 'Low', pulseClass: 'pulse-border-low' },
+        [PRIORITIES.MEDIUM]: { title: "Medium", color: "text-yellow-400", icon: '▲▲', label: 'Medium', pulseClass: 'pulse-border-medium' },
+        [PRIORITIES.HIGH]: { title: "High", color: "text-red-400", icon: '▲▲▲', label: 'High', pulseClass: 'pulse-border-high' }
+    };
+
+    const TASK_STATUS_CONFIG = {
+        [TASK_STATUS.TO_DO]: { color: 'bg-sky-500', label: 'To Do' },
+        [TASK_STATUS.IN_PROGRESS]: { color: 'bg-yellow-500', label: 'In Progress' },
+        [TASK_STATUS.ON_HOLD]: { color: 'bg-slate-500', label: 'On Hold' },
+        [TASK_STATUS.DONE]: { color: 'bg-green-500', label: 'Done' }
     };
 
     // --- Icon Components (Memoized) ---
@@ -259,7 +288,7 @@
     const LiveClock = React.memo(({ timezone, onTimezoneChange }) => {
         const time = useNow();
         const dateOptions = useMemo(() => ({ weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }), []);
-        const timeZone = useMemo(() => TIMEZONE_MAP[timezone], [timezone]); // Use global TIMEZONE_MAP
+        const timeZone = useMemo(() => TIMEZONE_MAP[timezone], [timezone]);
         
         const formattedTime = time.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const formattedDate = time.toLocaleDateString('en-US', { ...dateOptions, timeZone });
@@ -343,10 +372,9 @@
     ));
 
     const PriorityIndicator = React.memo(({ priority, onClick }) => {
-        const priorityStyles = { low: { icon: '▲', color: 'text-sky-400', label: 'Low' }, medium: { icon: '▲▲', color: 'text-yellow-400', label: 'Medium' }, high: { icon: '▲▲▲', color: 'text-red-400', label: 'High' } };
-        const current = priorityStyles[priority] || priorityStyles.low;
+        const current = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG[PRIORITIES.LOW];
         return (
-            <Tooltip text={`Priority: ${current.label}. Click to change.`}>
+            <Tooltip text={`Priority: ${current.title}. Click to change.`}>
                 <button onClick={onClick} className={`flex items-center space-x-1 text-xs font-semibold ${current.color} hover:opacity-75 transition-opacity`}><span>{current.icon}</span></button>
             </Tooltip>
         );
@@ -386,23 +414,23 @@
             const completedItems = updatedList.filter(item => item.completed).length;
             let newStatus = task.status;
 
-            if (updatedList.length > 0 && completedItems === updatedList.length) newStatus = 'Done';
-            else if (task.status === 'To Do' && completedItems > 0) newStatus = 'In Progress';
-            else if (completedItems < updatedList.length && task.status === 'Done') newStatus = 'In Progress';
-            else if (completedItems === 0 && updatedList.length > 0 && task.status === 'In Progress') newStatus = 'To Do';
+            if (updatedList.length > 0 && completedItems === updatedList.length) newStatus = TASK_STATUS.DONE;
+            else if (task.status === TASK_STATUS.TO_DO && completedItems > 0) newStatus = TASK_STATUS.IN_PROGRESS;
+            else if (completedItems < updatedList.length && task.status === TASK_STATUS.DONE) newStatus = TASK_STATUS.IN_PROGRESS;
+            else if (completedItems === 0 && updatedList.length > 0 && task.status === TASK_STATUS.IN_PROGRESS) newStatus = TASK_STATUS.TO_DO;
             
             let updates = { checklist: updatedList };
             
             if (newStatus !== task.status) {
                 updates.status = newStatus;
-                if (newStatus === 'In Progress' && ['To Do', 'On Hold', 'Done'].includes(task.status)) {
+                if (newStatus === TASK_STATUS.IN_PROGRESS && [TASK_STATUS.TO_DO, TASK_STATUS.ON_HOLD, TASK_STATUS.DONE].includes(task.status)) {
                     updates.startedAt = new Date().toISOString();
                 }
-                if (task.status === 'In Progress' && ['Done', 'On Hold', 'To Do'].includes(newStatus) && task.startedAt) {
+                if (task.status === TASK_STATUS.IN_PROGRESS && [TASK_STATUS.DONE, TASK_STATUS.ON_HOLD, TASK_STATUS.TO_DO].includes(newStatus) && task.startedAt) {
                     updates.totalElapsedTimeInSeconds = (task.totalElapsedTimeInSeconds || 0) + ((new Date().getTime() - new Date(task.startedAt).getTime()) / 1000);
                     updates.startedAt = null;
                 }
-                if (newStatus === 'To Do' && task.totalElapsedTimeInSeconds > 0) updates.totalElapsedTimeInSeconds = 0;
+                if (newStatus === TASK_STATUS.TO_DO && task.totalElapsedTimeInSeconds > 0) updates.totalElapsedTimeInSeconds = 0;
             }
             updateTask(task.id, updates);
         }, [task, updateTask]);
@@ -444,29 +472,27 @@
         }, [reminderInput, task.id, updateTask, setIsSettingReminder, setReminderInput]);
 
         const handlePriorityChange = () => {
-            const priorities = ['low', 'medium', 'high'];
-            updateTask(task.id, { priority: priorities[(priorities.indexOf(task.priority) + 1) % priorities.length] });
+            updateTask(task.id, { priority: PRIORITY_ORDER[(PRIORITY_ORDER.indexOf(task.priority) + 1) % PRIORITY_ORDER.length] });
         };
         
         const handlePauseTask = () => {
             if (!task.startedAt) return;
             const elapsed = (new Date().getTime() - new Date(task.startedAt).getTime()) / 1000;
-            updateTask(task.id, { status: 'On Hold', totalElapsedTimeInSeconds: (task.totalElapsedTimeInSeconds || 0) + elapsed, startedAt: null });
+            updateTask(task.id, { status: TASK_STATUS.ON_HOLD, totalElapsedTimeInSeconds: (task.totalElapsedTimeInSeconds || 0) + elapsed, startedAt: null });
         };
 
         const statusActions = {
-            'To Do': () => updateTask(task.id, { status: 'In Progress', startedAt: new Date().toISOString() }),
-            'In Progress': handlePauseTask,
-            'On Hold': () => updateTask(task.id, { status: 'In Progress', startedAt: new Date().toISOString() }),
+            [TASK_STATUS.TO_DO]: () => updateTask(task.id, { status: TASK_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() }),
+            [TASK_STATUS.IN_PROGRESS]: handlePauseTask,
+            [TASK_STATUS.ON_HOLD]: () => updateTask(task.id, { status: TASK_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() }),
         };
 
-        const statusColors = { 'To Do': 'bg-sky-500', 'In Progress': 'bg-yellow-500', 'On Hold': 'bg-slate-500', 'Done': 'bg-green-500' };
         const reminderIsDue = task.reminderAt && !task.reminderFired && now > new Date(task.reminderAt);
-        const pulseClass = reminderIsDue ? `pulse-border-${task.priority || 'low'}` : '';
+        const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || PRIORITY_CONFIG[PRIORITIES.LOW].pulseClass) : '';
 
         return (
             <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
-                <div className={`w-full py-1 rounded-t-lg ${statusColors[task.status]} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
+                <div className={`w-full py-1 rounded-t-lg ${TASK_STATUS_CONFIG[task.status]?.color || 'bg-gray-500'} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
                 <div className="p-2">
                     <div className="flex justify-between items-start mb-2">
                         {isEditingTitle ? (
@@ -547,20 +573,20 @@
                     )}
                     <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between items-center">
                         <div className="flex items-center space-x-2">
-                            {!task.archived && task.status === 'To Do' && !task.totalElapsedTimeInSeconds && (
+                            {!task.archived && task.status === TASK_STATUS.TO_DO && !task.totalElapsedTimeInSeconds && (
                                 <Tooltip text="Start working on this task">
-                                    <button onClick={statusActions['To Do']} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>
+                                    <button onClick={statusActions[TASK_STATUS.TO_DO]} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>
                                 </Tooltip>
                             )}
-                            {(task.status !== 'To Do' || task.totalElapsedTimeInSeconds > 0) && <TimeElapsed startTime={task.startedAt} totalElapsedSeconds={task.totalElapsedTimeInSeconds || 0} />}
-                            {!task.archived && task.status === 'In Progress' && task.startedAt && (
+                            {(task.status !== TASK_STATUS.TO_DO || task.totalElapsedTimeInSeconds > 0) && <TimeElapsed startTime={task.startedAt} totalElapsedSeconds={task.totalElapsedTimeInSeconds || 0} />}
+                            {!task.archived && task.status === TASK_STATUS.IN_PROGRESS && task.startedAt && (
                                 <Tooltip text="Pause task timer">
-                                    <button onClick={statusActions['In Progress']} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>
+                                    <button onClick={statusActions[TASK_STATUS.IN_PROGRESS]} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>
                                 </Tooltip>
                             )}
-                            {!task.archived && (task.status === 'On Hold' || (task.status === 'To Do' && task.totalElapsedTimeInSeconds > 0)) && (
+                            {!task.archived && (task.status === TASK_STATUS.ON_HOLD || (task.status === TASK_STATUS.TO_DO && task.totalElapsedTimeInSeconds > 0)) && (
                                 <Tooltip text="Resume working on this task">
-                                    <button onClick={statusActions['On Hold']} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>
+                                    <button onClick={statusActions[TASK_STATUS.ON_HOLD]} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>
                                 </Tooltip>
                             )}
                         </div>
@@ -585,7 +611,12 @@
         const now = useNow(); // Get current time, updates every second
 
         const [showArchived, setShowArchived] = useState(false);
-        const [collapsedColumns, setCollapsedColumns] = useState({ high: false, medium: false, low: false });
+        const [collapsedColumns, setCollapsedColumns] = useState(() => 
+            DISPLAY_PRIORITY_ORDER.reduce((acc, priority) => {
+                acc[priority] = false;
+                return acc;
+            }, {})
+        );
         const [showSettings, setShowSettings] = useState(false);
         const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({});
         const [clockTimezone, setClockTimezone] = useState('EST');
@@ -602,7 +633,7 @@
             if (!prevTasks || !currentTasks) return;
             currentTasks.forEach(task => {
                 const prevTask = prevTasks.find(pt => pt.id === task.id);
-                if (prevTask && prevTask.status !== 'Done' && task.status === 'Done' && !task.archived) {
+                if (prevTask && prevTask.status !== TASK_STATUS.DONE && task.status === TASK_STATUS.DONE && !task.archived) {
                     setTaskToClose(task);
                 }
             });
@@ -649,7 +680,7 @@
         const handleAddTask = (priority) => { addTask(priority); setCollapsedColumns(p => ({ ...p, [priority]: false })); };
         const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
         const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
-        const handleTimezoneChange = () => setClockTimezone(p => ['EST', 'PST', 'UTC'][(['EST', 'PST', 'UTC'].indexOf(p) + 1) % 3]);
+        const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
         
         const handleArchiveClick = () => {
             const newArchiveState = !showArchived;
@@ -710,9 +741,9 @@
         const sortFn = useMemo(() => showArchived ? (a, b) => new Date(b.timestamp) - new Date(a.timestamp) : (a, b) => (a.rank || 0) - (b.rank || 0), [showArchived]);
         
         const priorityColumns = useMemo(() => ({
-            high: priorityTasks.filter(t => t.priority === 'high').sort(sortFn),
-            medium: priorityTasks.filter(t => t.priority === 'medium').sort(sortFn),
-            low: priorityTasks.filter(t => t.priority === 'low').sort(sortFn),
+            [PRIORITIES.HIGH]: priorityTasks.filter(t => t.priority === PRIORITIES.HIGH).sort(sortFn),
+            [PRIORITIES.MEDIUM]: priorityTasks.filter(t => t.priority === PRIORITIES.MEDIUM).sort(sortFn),
+            [PRIORITIES.LOW]: priorityTasks.filter(t => t.priority === PRIORITIES.LOW).sort(sortFn),
         }), [priorityTasks, sortFn]);
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
@@ -805,7 +836,7 @@
                         );
                     })}
                     {/* Priority Columns */}
-                    {['high', 'medium', 'low'].map(priority => {
+                    {DISPLAY_PRIORITY_ORDER.map(priority => {
                         const tasksForThisPriority = priorityColumns[priority];
                         const isManuallyCollapsed = collapsedColumns[priority];
                         // Determine effective collapsed state
@@ -830,12 +861,11 @@
 
     // --- Column & Modal Components ---
     const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
-        const priorityStyles = { high: { title: "High", color: "text-red-400" }, medium: { title: "Medium", color: "text-yellow-400" }, low: { title: "Low", color: "text-sky-400" }};
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
-
+        const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG[PRIORITIES.LOW];
         const headerContent = (
             <>
-                <span>{priorityStyles[priority].title} Priority ({tasks.length})</span>
+                <span>{config.title} Priority ({tasks.length})</span>
                 {isVerticalLayout && ( // Only show chevron in vertical mode
                     <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
                 )}
@@ -848,13 +878,13 @@
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button 
                             onClick={onToggleCollapse} 
-                            className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}
+                            className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${config.color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}
                         >
                             {headerContent}
                         </button>
                     </Tooltip>
                 ) : ( // Static header for horizontal layout
-                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} bg-slate-900/60 flex-shrink-0`}>
+                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${config.color} bg-slate-900/60 flex-shrink-0`}>
                         {headerContent} {/* Chevron will be hidden by isVerticalLayout condition inside headerContent */}
                     </div>
                 )}
@@ -866,7 +896,7 @@
                     }
                 `}>
                     {tasks.map((task) => (
-                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(!showArchived && task.status !== 'In Progress' && task.status !== 'To Do' && task.status !== 'On Hold') ? 'opacity-20' : 'opacity-100'}`}>
+                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(!showArchived && task.status === TASK_STATUS.DONE) ? 'opacity-20' : 'opacity-100'}`}>
                             <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
                         </div>
                     ))}
@@ -934,7 +964,13 @@
                         + Add Task
                     </button>
                 </Tooltip>
-                {isOpen && <div className="absolute right-0 mt-2 w-48 bg-slate-700 rounded-md shadow-lg z-20"><button onClick={() => handleSelect('high')} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-slate-600">High Priority</button><button onClick={() => handleSelect('medium')} className="w-full text-left px-4 py-2 text-sm text-yellow-400 hover:bg-slate-600">Medium Priority</button><button onClick={() => handleSelect('low')} className="w-full text-left px-4 py-2 text-sm text-sky-400 hover:bg-slate-600">Low Priority</button></div>}
+                {isOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-slate-700 rounded-md shadow-lg z-20">
+                        {DISPLAY_PRIORITY_ORDER.map(priorityKey => (
+                            <button key={priorityKey} onClick={() => handleSelect(priorityKey)} className={`w-full text-left px-4 py-2 text-sm ${PRIORITY_CONFIG[priorityKey].color} hover:bg-slate-600`}>{PRIORITY_CONFIG[priorityKey].title} Priority</button>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     });
