@@ -63,6 +63,7 @@
         const [taskToClose, setTaskToClose] = useState(null);
         const [taskToUnarchive, setTaskToUnarchive] = useState(null);
         const [taskToDelete, setTaskToDelete] = useState(null);
+        // No new state needed here for clear archive modal, will be in App.js
         
         const appId = 'taiko-app-local';
 
@@ -150,6 +151,11 @@
             }));
         }, []);
         
+        const clearArchive = useCallback(() => {
+            // This will remove all tasks that are marked as archived
+            setTasks(prevTasks => prevTasks.filter(task => !task.archived));
+        }, []);
+
         const allTags = useMemo(() => {
             const tags = new Set();
             // Only consider tags from non-archived tasks
@@ -160,12 +166,12 @@
         }, [tasks]);
 
         const contextValue = useMemo(() => ({
-            tasks, updateTask, addTask, deleteTask, archiveTask,
+            tasks, updateTask, addTask, deleteTask, archiveTask, clearArchive,
             settings, setSettings, allTags,
             taskToClose, setTaskToClose,
             taskToUnarchive, setTaskToUnarchive,
             taskToDelete, setTaskToDelete,
-        }), [tasks, settings, allTags, taskToClose, taskToUnarchive, taskToDelete]);
+        }), [tasks, settings, allTags, taskToClose, taskToUnarchive, taskToDelete, clearArchive]);
         
         return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
     };
@@ -575,7 +581,7 @@
 
     // --- Main Presentation Component ---
     const App = () => {
-        const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask, updateTask } = useAppContext();
+        const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask, updateTask, clearArchive } = useAppContext();
         const now = useNow(); // Get current time, updates every second
 
         const [isFocusMode, setIsFocusMode] = useState(false);
@@ -587,6 +593,7 @@
         const [activeTags, setActiveTags] = useState([]);
         const [tagSwimlanes, setTagSwimlanes] = useState([]);
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
+        const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
 
         const currentTasks = useMemo(() => showArchived ? tasks.filter(t => t.archived) : tasks.filter(t => !t.archived), [tasks, showArchived]);
         
@@ -626,6 +633,12 @@
             deleteTask(taskToDelete);
             setTaskToDelete(null);
         }, [taskToDelete, deleteTask]);
+
+        const handleConfirmClearArchive = useCallback(() => {
+            clearArchive();
+            setShowClearArchiveConfirm(false);
+            // Optionally, could switch back to viewing active tasks: setShowArchived(false);
+        }, [clearArchive]);
         
         const handleToggleTagCollapse = useCallback((tag) => {
             setCollapsedTagSwimlanes(prev => ({
@@ -720,6 +733,7 @@
                 {taskToUnarchive && <UnarchiveModal task={taskToUnarchive} onConfirm={handleConfirmUnarchive} onCancel={() => setTaskToUnarchive(null)} />}
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                 {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
+                {showClearArchiveConfirm && <ClearArchiveConfirmationModal onConfirm={handleConfirmClearArchive} onCancel={() => setShowClearArchiveConfirm(false)} />}
                 {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={tagSwimlanes} setSwimlanes={setTagSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
 
                 <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
@@ -751,6 +765,11 @@
                         <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks"}>
                             <button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button>
                         </Tooltip>
+                        {showArchived && (
+                            <Tooltip text="Permanently delete all archived tasks">
+                                <button onClick={() => setShowClearArchiveConfirm(true)} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all">Clear Archive</button>
+                            </Tooltip>
+                        )}
                         <AddTaskDropdown onAddTask={handleAddTask} />
                     </div>
                 </header>
@@ -942,6 +961,7 @@
     const CloseoutModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Task Complete!</h3><p className="text-slate-300 mb-4">Would you like to archive the task "{task.title}"?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Keep Active</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Archive Task</button></div></div></Modal>;
     const UnarchiveModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Unarchive Task?</h3><p className="text-slate-300 mb-4">You've made a change to an archived task. Would you like to move "{task.title}" back to the active board?</p><div className="flex justify-center space-x-4"><Tooltip text="Keep the task archived"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">No, Keep Archived</button></Tooltip><Tooltip text="Move task to active board"><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Yes, Unarchive</button></Tooltip></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
+    const ClearArchiveConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-md text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-red-400 mb-2">Clear Entire Archive?</h3><p className="text-slate-300 mb-1">Are you sure you want to permanently delete <strong className="text-red-300">ALL</strong> archived tasks?</p><p className="text-slate-400 text-sm mb-4">This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel operation"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm deletion of all archived tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600">Yes, Delete All Archived</button></Tooltip></div></div></Modal>;
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         return ( 
