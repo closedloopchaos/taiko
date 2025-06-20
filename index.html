@@ -513,19 +513,27 @@
         
         const handleAddTag = () => {
             const currentTags = task.tags || [];
-            if (newTag && !currentTags.includes(newTag)) {
-                const trimmedNewTag = newTag.trim();
+            const trimmedNewTag = newTag.trim();
+
+            if (trimmedNewTag && !currentTags.includes(trimmedNewTag)) {
+                // Get custom tags *before* adding the new one.
+                // task.tags should only store custom tags.
+                const existingCustomTagsCount = currentTags.length;
+
                 const newTagsArray = [...currentTags, trimmedNewTag];
                 updateTask(task.id, { tags: newTagsArray });
 
-                // Ensure the swimlane for this tag is active and expand it.
-                setActiveSwimlanes(prevActiveSwimlanes => {
-                    expandSwimlane(trimmedNewTag); // Expand the swimlane
-                    if (!prevActiveSwimlanes.includes(trimmedNewTag)) {
-                        return [...prevActiveSwimlanes, trimmedNewTag]; // Add to active if not already
-                    }
-                    return prevActiveSwimlanes;
-                });
+                // Only auto-activate swimlane if this is the *first* custom tag added to the task,
+                // and ensure the tag itself is not a priority display title (which it shouldn't be for custom tags).
+                if (existingCustomTagsCount === 0 && !PRIORITY_DISPLAY_TITLES_ARRAY.includes(trimmedNewTag)) {
+                    setActiveSwimlanes(prevActiveSwimlanes => {
+                        expandSwimlane(trimmedNewTag); 
+                        if (!prevActiveSwimlanes.includes(trimmedNewTag)) {
+                            return [...prevActiveSwimlanes, trimmedNewTag]; 
+                        }
+                        return prevActiveSwimlanes;
+                    });
+                }
                 setNewTag('');
             }
         };
@@ -847,11 +855,28 @@
         }, [swimlaneTasks, settings.autoCollapse, setActiveSwimlanes]); // Dependencies: swimlaneTasks, autoCollapse setting, and the stable setter.
 
         const handleTagFilterClick = (tag) => {
-            setActiveTags(prev => {
-                if (prev.includes(tag)) {
-                    return prev.filter(t => t !== tag);
+            const isPriorityTag = PRIORITY_TITLE_TO_CONSTANT_MAP[tag]; // Will be truthy (the constant string) if 'tag' is a priority display title
+
+            setActiveTags(prevActiveTags => {
+                if (isPriorityTag) {
+                    // It's a priority filter
+                    if (prevActiveTags.includes(tag)) {
+                        // Clicked an active priority filter: deactivate it
+                        return prevActiveTags.filter(t => t !== tag);
+                    } else {
+                        // Clicked an inactive priority filter:
+                        // 1. Remove all other active priority filters
+                        const nonPriorityFilters = prevActiveTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
+                        // 2. Add the newly clicked priority filter
+                        return [...nonPriorityFilters, tag];
+                    }
                 } else {
-                    return [...prev, tag];
+                    // It's a custom tag filter: toggle normally
+                    if (prevActiveTags.includes(tag)) {
+                        return prevActiveTags.filter(t => t !== tag);
+                    } else {
+                        return [...prevActiveTags, tag];
+                    }
                 }
             });
         };
