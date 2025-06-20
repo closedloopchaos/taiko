@@ -488,13 +488,26 @@
 
         const handleUpdateChecklist = useCallback((updatedList) => {
             const completedItems = updatedList.filter(item => item.completed).length;
-            let newStatus = task.status;
+            let newStatus = task.status; // Start with current status
 
-            if (updatedList.length > 0 && completedItems === updatedList.length) newStatus = TASK_STATUS.DONE;
-            else if (task.status === TASK_STATUS.TO_DO && completedItems > 0) newStatus = TASK_STATUS.IN_PROGRESS;
-            else if (completedItems < updatedList.length && task.status === TASK_STATUS.DONE) newStatus = TASK_STATUS.IN_PROGRESS;
-            else if (completedItems === 0 && updatedList.length > 0 && task.status === TASK_STATUS.IN_PROGRESS) newStatus = TASK_STATUS.TO_DO;
-            
+            if (updatedList.length > 0 && completedItems === updatedList.length) {
+                // All items checked
+                newStatus = TASK_STATUS.DONE;
+            } else if (completedItems > 0) {
+                // At least one item is checked, but not all
+                if (task.status === TASK_STATUS.TO_DO || task.status === TASK_STATUS.ON_HOLD) {
+                    newStatus = TASK_STATUS.IN_PROGRESS; // Move from To Do or On Hold to In Progress
+                } else if (task.status === TASK_STATUS.DONE) {
+                    newStatus = TASK_STATUS.IN_PROGRESS; // Move from Done to In Progress if an item is unchecked
+                }
+                // If already IN_PROGRESS and some items are checked (but not all), it remains IN_PROGRESS.
+            } else if (completedItems === 0 && updatedList.length > 0) {
+                // All items are unchecked (and there are items)
+                if (task.status === TASK_STATUS.IN_PROGRESS) {
+                    newStatus = TASK_STATUS.TO_DO; // Move from In Progress to To Do
+                }
+                // If ON_HOLD and all items become unchecked, it remains ON_HOLD by default.
+            }
             let updates = { checklist: updatedList };
             
             if (newStatus !== task.status) {
