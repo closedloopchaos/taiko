@@ -799,6 +799,9 @@
         // const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved to AppProvider
         const [clockTimezone, setClockTimezone] = useState('EST');
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
+        
+        // State for the main "Add Task" input in the header
+        const [showMainAddTaskInput, setShowMainAddTaskInput] = useState(false);
         const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
 
         const currentTasks = useMemo(() => showArchived ? tasks.filter(t => t.archived) : tasks.filter(t => !t.archived), [tasks, showArchived]);
@@ -840,17 +843,11 @@
             setTaskToDelete(null);
         }, [taskToDelete, deleteTask]);
 
-        const handleConfirmClearArchive = useCallback(() => {
-            clearArchive();
-            setShowClearArchiveConfirm(false);
-            // Optionally, could switch back to viewing active tasks: setShowArchived(false);
-        }, [clearArchive]); // toggleSwimlaneCollapse is now from context
+        const handleConfirmClearArchive = useCallback(() => { clearArchive(); setShowClearArchiveConfirm(false); }, [clearArchive]);
+
 
         const handleAddTask = () => { 
-            addTask(); // Uses defaults: 'New Task' title, null priority, empty tags
-            // No specific column needs to be expanded by default for unprioritized tasks,
-            // unless you have a dedicated "Unprioritized" column and want to expand it.
-            // For now, let's assume the "Triage" column will be visible by default if it has tasks.
+            setShowMainAddTaskInput(true); // Show the input form instead of adding directly
         };
         const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
         const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
@@ -1014,7 +1011,15 @@
                                 <button onClick={() => setShowClearArchiveConfirm(true)} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all">Clear Archive</button>
                             </Tooltip>
                         )}
-                        <AddTaskButton onAddTask={handleAddTask} /> 
+                        {/* Conditionally render the button or the quick add input */}
+                        {showMainAddTaskInput ? (
+                             <QuickAddInputForm 
+                                onAdd={(title) => { addTask(title); setShowMainAddTaskInput(false); }} 
+                                onCancel={() => setShowMainAddTaskInput(false)}
+                            />
+                        ) : (
+                            <AddTaskButton onAddTask={handleAddTask} />
+                        )}
                     </div>
                 </header>
                 
@@ -1106,14 +1111,12 @@
     // --- Column & Modal Components ---
     const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null }) => {
         const { addTask } = useAppContext();
-        const [showQuickAdd, setShowQuickAdd] = useState(false);
-        const [quickAddTitle, setQuickAddTitle] = useState('');
+        const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
         const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.null; // 'priority' can be PRIORITIES.LOW or null
 
         let displayTitleText = titleOverride || config.title;
-        // If it's a swimlane, not the "New Tasks" (titleOverride) column, and it's a configured priority (not "Unprioritized")
         if (isSwimlane && !titleOverride && config.title !== PRIORITY_CONFIG.null.title) {
             displayTitleText = `${config.title} Priority`;
         }
@@ -1130,12 +1133,8 @@
             </>
         );
         
-        const handleQuickAddTask = () => {
-            if (!quickAddTitle.trim()) {
-                setShowQuickAdd(false); // Hide if title is empty
-                setQuickAddTitle('');
-                return;
-            }
+        const handleQuickAddTask = (titleFromInput) => {
+            if (!titleFromInput.trim()) { setShowQuickAdd(false); return; }
 
             let taskPriorityToAdd = null;
             let taskTagsToAdd = [];
@@ -1148,9 +1147,8 @@
                 taskTagsToAdd = [PRIORITY_CONFIG[priority].title]; // The display title like "Low"
             }
             
-            addTask(quickAddTitle.trim(), taskPriorityToAdd, taskTagsToAdd);
-            setQuickAddTitle('');
-            setShowQuickAdd(false); // Optionally keep it open: setShowQuickAdd(true);
+            addTask(titleFromInput.trim(), taskPriorityToAdd, taskTagsToAdd);
+            setShowQuickAdd(false);
         };
 
 
@@ -1191,7 +1189,7 @@
                     </div>
                 )}
                 {showQuickAdd && !isCollapsed && (
-                    <QuickAddInputForm onAdd={handleQuickAddTask} title={quickAddTitle} setTitle={setQuickAddTitle} onCancel={() => { setShowQuickAdd(false); setQuickAddTitle(''); }} />
+                    <QuickAddInputForm onAdd={handleQuickAddTask} onCancel={() => setShowQuickAdd(false)} />
                 )}
                 <div className={`
                     flex-grow p-2 transition-all duration-300 ease-in-out overflow-x-hidden
@@ -1212,8 +1210,7 @@
 
     const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout }) => {
         const { addTask } = useAppContext();
-        const [showQuickAdd, setShowQuickAdd] = useState(false);
-        const [quickAddTitle, setQuickAddTitle] = useState('');
+        const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
 
@@ -1224,21 +1221,16 @@
             </>
         );
 
-        const handleQuickAddTask = () => {
-            if (!quickAddTitle.trim()) {
-                setShowQuickAdd(false);
-                setQuickAddTitle('');
-                return;
-            }
+        const handleQuickAddTask = (titleFromInput) => {
+            if (!titleFromInput.trim()) { setShowQuickAdd(false); return; }
 
             const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
 
             if (priorityConstant) {
-                addTask(quickAddTitle.trim(), priorityConstant, []); // Set priority, no tags
+                addTask(titleFromInput.trim(), priorityConstant, []); // Set priority, no tags
             } else {
-                addTask(quickAddTitle.trim(), null, [tag]); // Null priority, add custom tag
+                addTask(titleFromInput.trim(), null, [tag]); // Null priority, add custom tag
             }
-            setQuickAddTitle('');
             setShowQuickAdd(false);
         };
 
@@ -1279,7 +1271,7 @@
                     </div>
                 )}
                 {showQuickAdd && !isCollapsed && (
-                    <QuickAddInputForm onAdd={handleQuickAddTask} title={quickAddTitle} setTitle={setQuickAddTitle} onCancel={() => { setShowQuickAdd(false); setQuickAddTitle(''); }} />
+                    <QuickAddInputForm onAdd={handleQuickAddTask} onCancel={() => setShowQuickAdd(false)} />
                 )}
                 <div className={`
                     flex-grow p-2 overflow-x-hidden transition-all duration-300 ease-in-out
@@ -1298,26 +1290,39 @@
         );
     });
 
-    const QuickAddInputForm = React.memo(({ onAdd, title, setTitle, onCancel }) => {
+    const QuickAddInputForm = React.memo(({ onAdd, onCancel, placeholder = "New task title..." }) => {
+        const [internalValue, setInternalValue] = useState('');
         const inputRef = useRef(null);
+
         useEffect(() => {
             if (inputRef.current) inputRef.current.focus();
         }, []);
+
+        const handleSubmit = () => {
+            const trimmedValue = internalValue.trim();
+            if (trimmedValue) {
+                onAdd(trimmedValue);
+                setInternalValue(''); // Reset for next potential use if not hidden immediately
+            } else {
+                // If input is empty and Enter/Add is pressed, effectively cancel.
+                onCancel();
+            }
+        };
 
         return (
             <div className="p-2 border-b border-slate-700/50 bg-slate-800/30">
                 <input
                     ref={inputRef}
                     type="text"
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') onAdd(); if (e.key === 'Escape') onCancel(); }}
-                    placeholder="New task title..."
+                    value={internalValue}
+                    onChange={e => setInternalValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onCancel(); }}
+                    placeholder={placeholder}
                     className="w-full bg-slate-900/80 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500"
                 />
                 <div className="mt-2 flex justify-end space-x-2">
                     <button onClick={onCancel} className="px-3 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded-md">Cancel</button>
-                    <button onClick={onAdd} className="px-3 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded-md">Add Task</button>
+                    <button onClick={handleSubmit} className="px-3 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded-md">Add Task</button>
                 </div>
             </div>
         );
