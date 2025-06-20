@@ -37,13 +37,10 @@
     <!-- React Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    
+
     <!-- Babel Standalone for JSX Transformation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Tone.js for sound synthesis -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-
     <!-- Main Application Logic -->
     <script type="text/babel">
 
@@ -57,11 +54,9 @@
         // --- Core State ---
         const [tasks, setTasks] = useState([]);
         const [settings, setSettings] = useState({ 
-            soundAlerts: true, 
             confirmOnDelete: true, 
-            autoCollapse: true,
-            verticalLayout: false,
-            reminderNotificationSound: true // New setting for reminder sounds
+            autoCollapse: true, // Default to true
+            verticalLayout: false
         });
 
         // --- Modal-related State ---
@@ -77,11 +72,9 @@
             if (savedTasks) try { setTasks(JSON.parse(savedTasks)); } catch { console.error("Could not parse saved tasks."); }
             
             const defaultSettings = {
-                soundAlerts: true,
                 confirmOnDelete: true,
                 autoCollapse: true,
-                verticalLayout: false,
-                reminderNotificationSound: true
+                verticalLayout: false
             };
 
             const savedSettings = localStorage.getItem(`${appId}-settings`);
@@ -349,7 +342,7 @@
         
         const handleDeleteRequest = useCallback(() => {
             if (settings.confirmOnDelete) {
-                setTaskToDelete(task.id);
+                setTaskToDelete(task.id); // Corrected: Should set the task ID
             } else {
                 deleteTask(task.id);
             }
@@ -524,7 +517,6 @@
     // --- Main Presentation Component ---
     const App = () => {
         const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask, updateTask } = useAppContext();
-        const playSound = useCallback(() => { if (settings.soundAlerts && typeof Tone !== 'undefined') new Tone.Synth().toDestination().triggerAttackRelease("C5", "8n"); }, [settings.soundAlerts]);
         const now = useNow(); // Get current time, updates every second
 
         const [isFocusMode, setIsFocusMode] = useState(false);
@@ -545,10 +537,10 @@
             currentTasks.forEach(task => {
                 const prevTask = prevTasks.find(pt => pt.id === task.id);
                 if (prevTask && prevTask.status !== 'Done' && task.status === 'Done' && !task.archived) {
-                    setTaskToClose(task); playSound();
+                    setTaskToClose(task);
                 }
             });
-        }, [currentTasks, prevTasks, playSound, setTaskToClose]);
+        }, [currentTasks, prevTasks, setTaskToClose]);
 
         // --- Effect for Reminder Notifications ---
         useEffect(() => {
@@ -563,18 +555,10 @@
                         body: `Reminder for: ${task.title}`,
                         // icon: 'your_icon.png' // Optional: Add an icon URL here
                     });
-                    // Play sound only if the specific setting for reminder notification sound is enabled
-                    if (settings.reminderNotificationSound && typeof Tone !== 'undefined') {
-                        // Ensure Tone.js is started (often required due to browser autoplay policies)
-                        Tone.start().then(() => {
-                            const synth = new Tone.Synth().toDestination();
-                            synth.triggerAttackRelease("C5", "8n");
-                        }).catch(e => console.error("Error starting Tone.js or playing sound:", e));
-                    }
                     updateTask(task.id, { reminderFired: true });
                 }
             });
-        }, [tasks, now, updateTask, settings.reminderNotificationSound]);
+        }, [tasks, now, updateTask]);
 
 
         const handleConfirmDelete = useCallback(() => {
@@ -780,8 +764,6 @@
             <Modal onClose={onClose}>
                 <ModalContent title="Settings" onClose={onClose}>
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between"><label className="text-slate-300">Sound on Task Completion</label><button onClick={() => handleToggle('soundAlerts')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.soundAlerts ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.soundAlerts ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
-                        <div className="flex items-center justify-between"><label className="text-slate-300">Sound on Reminder Notification</label><button onClick={() => handleToggle('reminderNotificationSound')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.reminderNotificationSound ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.reminderNotificationSound ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
                         <div className="flex items-center justify-between"><label className="text-slate-300">Confirm on Delete</label><button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
                         <div className="flex items-center justify-between"><label className="text-slate-300">Auto-collapse Empty Columns</label><button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
                         <div className="flex items-center justify-between"><label className="text-slate-300">Stack Columns Vertically</label><button onClick={() => handleToggle('verticalLayout')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.verticalLayout ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.verticalLayout ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>
