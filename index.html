@@ -233,7 +233,7 @@
     const ChevronDownIcon = React.memo(({ className }) => (
         <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className={`h-5 w-5 ${className || ''}`} // Apply passed className here
+            className={`h-5 w-5 ${className || ''}`} 
             viewBox="0 0 20 20" 
             fill="currentColor"
         >
@@ -241,6 +241,12 @@
         </svg>
     ));
     const SettingsIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.096 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>);
+    const BugIcon = React.memo(() => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+        </svg>
+    ));
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
     // --- Time & Countdown Components (Memoized) ---
@@ -728,6 +734,16 @@
                     <div className="flex items-center space-x-4">
                         <Tooltip text="Settings">
                             <button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
+                        </Tooltip>
+                        <Tooltip text="Report Issue">
+                            <a 
+                                href="https://github.com/closedloopchaos/taiko/issues/new/choose" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"
+                            >
+                                <BugIcon />
+                            </a>
                         </Tooltip>
                         <Tooltip text={isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"}>
                             <button onClick={handleFocusClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 transition-all ${isFocusMode ? 'bg-purple-600 hover:bg-purple-500 focus:ring-purple-400' : 'bg-slate-700 hover:bg-slate-600 focus:ring-slate-500'}`}>{isFocusMode ? 'Exit Focus' : 'Focus Mode'}</button>
