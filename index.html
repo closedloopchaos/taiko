@@ -229,8 +229,17 @@
     const ArchiveIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>);
     const RestoreIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15l4 4 4-4M4 4h16v4H4z" /></svg>);
     const DeleteIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>);
-    const BellIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>);
-    const ChevronDownIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>);
+    const BellIcon = React.memo(({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>);
+    const ChevronDownIcon = React.memo(({ className }) => (
+        <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`h-5 w-5 ${className || ''}`} // Apply passed className here
+            viewBox="0 0 20 20" 
+            fill="currentColor"
+        >
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+    ));
     const SettingsIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.096 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>);
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
@@ -521,6 +530,7 @@
         const [showArchived, setShowArchived] = useState(false);
         const [collapsedColumns, setCollapsedColumns] = useState({ high: false, medium: false, low: false });
         const [showSettings, setShowSettings] = useState(false);
+        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({});
         const [clockTimezone, setClockTimezone] = useState('EST');
         const [activeTags, setActiveTags] = useState([]);
         const [tagSwimlanes, setTagSwimlanes] = useState([]);
@@ -565,6 +575,13 @@
             setTaskToDelete(null);
         }, [taskToDelete, deleteTask]);
         
+        const handleToggleTagCollapse = useCallback((tag) => {
+            setCollapsedTagSwimlanes(prev => ({
+                ...prev,
+                [tag]: !prev[tag] // Toggle the specific tag's collapsed state
+            }));
+        }, []); // setCollapsedTagSwimlanes is stable
+
         const handleAddTask = (priority) => { addTask(priority); setCollapsedColumns(p => ({ ...p, [priority]: false })); };
         const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
         const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
@@ -687,12 +704,42 @@
                 </div>
 
                 <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
-                    {tagSwimlanes.map(tag => (
-                        <TagColumn key={tag} tag={tag} tasks={swimlaneTasks[tag] || []} clockTimezone={clockTimezone} />
-                    ))}
-                    <PriorityColumn priority="high" tasks={priorityColumns.high} isCollapsed={collapsedColumns.high} onToggleCollapse={() => setCollapsedColumns(p => ({...p, high: !p.high}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} clockTimezone={clockTimezone} />
-                    <PriorityColumn priority="medium" tasks={priorityColumns.medium} isCollapsed={collapsedColumns.medium} onToggleCollapse={() => setCollapsedColumns(p => ({...p, medium: !p.medium}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} clockTimezone={clockTimezone} />
-                    <PriorityColumn priority="low" tasks={priorityColumns.low} isCollapsed={collapsedColumns.low} onToggleCollapse={() => setCollapsedColumns(p => ({...p, low: !p.low}))} isFocusMode={isFocusMode} showArchived={showArchived} isVerticalLayout={settings.verticalLayout} clockTimezone={clockTimezone} />
+                    {tagSwimlanes.map(tag => {
+                        const tasksForThisTag = swimlaneTasks[tag] || [];
+                        const isManuallyCollapsed = collapsedTagSwimlanes[tag] || false;
+                        // Determine effective collapsed state based on auto-collapse setting and task count
+                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisTag.length === 0) ? true : isManuallyCollapsed;
+
+                        return (
+                            <TagColumn 
+                                key={tag} 
+                                tag={tag} 
+                                tasks={tasksForThisTag} 
+                                clockTimezone={clockTimezone}
+                                isCollapsed={isEffectivelyCollapsed} // Use effective state
+                                onToggleCollapse={() => handleToggleTagCollapse(tag)} // Manual toggle still updates manual state
+                                isVerticalLayout={settings.verticalLayout} />
+                        );
+                    })}
+                    {['high', 'medium', 'low'].map(priority => {
+                        const tasksForThisPriority = priorityColumns[priority];
+                        const isManuallyCollapsed = collapsedColumns[priority];
+                        // Determine effective collapsed state
+                        const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisPriority.length === 0) ? true : isManuallyCollapsed;
+
+                        return (
+                            <PriorityColumn 
+                                key={priority}
+                                priority={priority} 
+                                tasks={tasksForThisPriority} 
+                                isCollapsed={isEffectivelyCollapsed} // Use effective state
+                                onToggleCollapse={() => setCollapsedColumns(p => ({...p, [priority]: !p[priority]}))} // Manual toggle
+                                isFocusMode={isFocusMode} 
+                                showArchived={showArchived} 
+                                isVerticalLayout={settings.verticalLayout} 
+                                clockTimezone={clockTimezone} />
+                        );
+                    })}
                 </main>
             </div>
         );
@@ -701,15 +748,35 @@
     // --- Column & Modal Components ---
     const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, isFocusMode, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
         const priorityStyles = { high: { title: "High", color: "text-red-400" }, medium: { title: "Medium", color: "text-yellow-400" }, low: { title: "Low", color: "text-sky-400" }};
-        const layoutClasses = isVerticalLayout ? 'w-full' : 'flex-1 min-w-0';
-        
-        return (
-            <div className={`flex flex-col h-full bg-slate-900/30 rounded-lg ${layoutClasses}`}>
-                <button onClick={onToggleCollapse} className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0`}>
-                    <span>{priorityStyles[priority].title} Priority ({tasks.length})</span>
+        const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
+
+        const headerContent = (
+            <>
+                <span>{priorityStyles[priority].title} Priority ({tasks.length})</span>
+                {isVerticalLayout && ( // Only show chevron in vertical mode
                     <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                </button>
-                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out overflow-y-auto overflow-x-hidden ${isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-full opacity-100'}`}>
+                )}
+            </>
+        );
+
+        return (
+            <div className={`flex flex-col bg-slate-900/30 rounded-lg ${columnLayoutClasses}`}>
+                {isVerticalLayout ? (
+                    <button onClick={onToggleCollapse} className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} hover:bg-slate-700/50 flex-shrink-0 transition-colors`}>
+                        {headerContent}
+                    </button>
+                ) : (
+                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${priorityStyles[priority].color} bg-slate-900/60 flex-shrink-0`}>
+                        {headerContent} {/* Chevron will be hidden by isVerticalLayout condition inside headerContent */}
+                    </div>
+                )}
+                <div className={`
+                    flex-grow p-2 transition-all duration-300 ease-in-out overflow-x-hidden
+                    ${isVerticalLayout ? 
+                        (isCollapsed ? 'max-h-0 py-0 opacity-0' : 'opacity-100') :
+                        'max-h-full opacity-100 overflow-y-auto'
+                    }
+                `}>
                     {tasks.map((task) => (
                         <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(isFocusMode && !showArchived && task.status !== 'In Progress') ? 'opacity-20' : 'opacity-100'}`}>
                             <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
@@ -720,15 +787,39 @@
         );
     });
 
-    const TagColumn = React.memo(({ tag, tasks, clockTimezone }) => { // Added clockTimezone
+    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout }) => {
+        const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
+
+        const headerContent = (
+            <>
+                <span>{tag} ({tasks.length})</span>
+                {isVerticalLayout && <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />} {/* Chevron only in vertical layout */}
+            </>
+        );
+
         return (
-            <div className="flex flex-col flex-1 min-w-0 h-full bg-indigo-900/10 rounded-lg">
-                <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-400 bg-slate-900/50 flex-shrink-0">
-                    <span>{tag} ({tasks.length})</span>
-                </div>
-                <div className="flex-grow p-2 overflow-y-auto overflow-x-hidden">
-                    {tasks.map(task => (
-                        <div key={task.id} className="w-full min-w-0"> {/* Added w-full min-w-0 here */}
+            <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border border-indigo-800/50 rounded-lg ${columnLayoutClasses}`}>
+                {isVerticalLayout ? (
+                    <button
+                        onClick={onToggleCollapse}
+                        className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors"
+                    >
+                        {headerContent}
+                    </button>
+                ) : (
+                    <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0">
+                        {headerContent}
+                    </div>
+                )}
+                <div className={`
+                    flex-grow p-2 overflow-x-hidden transition-all duration-300 ease-in-out
+                    ${isVerticalLayout ?
+                        (isCollapsed ? 'max-h-0 py-0 opacity-0' : 'opacity-100') :
+                        'max-h-full opacity-100 overflow-y-auto'
+                    }
+                `}>
+                    {tasks.map(task => ( 
+                        <div key={task.id} className="w-full min-w-0">
                             <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
                         </div>
                     ))}
