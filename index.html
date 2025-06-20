@@ -147,10 +147,9 @@
         
         const allTags = useMemo(() => {
             const tags = new Set();
-            tasks.forEach(task => {
-                if (task.tags) {
-                    task.tags.forEach(tag => tags.add(tag));
-                }
+            // Only consider tags from non-archived tasks
+            tasks.filter(task => !task.archived).forEach(task => {
+                (task.tags || []).forEach(tag => tags.add(tag));
             });
             return Array.from(tags).sort();
         }, [tasks]);
@@ -478,6 +477,13 @@
             if (newArchiveState) setIsFocusMode(false);
             setShowArchived(newArchiveState);
         };
+
+        // Effect to remove swimlanes if their tags are no longer in allTags (e.g., all tasks with that tag were archived)
+        useEffect(() => {
+            setTagSwimlanes(currentSwimlanes =>
+                currentSwimlanes.filter(swimlaneTag => allTags.includes(swimlaneTag))
+            );
+        }, [allTags]); // Intentionally not including setTagSwimlanes as it's stable
         
         const handleTagFilterClick = (tag) => {
             setActiveTags(prev => {
