@@ -305,7 +305,7 @@
     const ChecklistItem = React.memo(({ item, onUpdate, onDelete }) => (
         <li className="flex items-center space-x-2 group">
             <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
-            <input type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} className={`flex-grow bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} />
+            <input type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} />
             <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -431,11 +431,11 @@
         const pulseClass = reminderIsDue ? `pulse-border-${task.priority || 'low'}` : '';
 
         return (
-            <div className={`bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
+            <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
                 <div className={`w-full py-1 rounded-t-lg ${statusColors[task.status]} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
-                <div className="p-3">
+                <div className="p-2">
                     <div className="flex justify-between items-start mb-2">
-                        {isEditingTitle ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="w-full bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" /> : <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer">{task.title}</h3>}
+                        {isEditingTitle ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" /> : <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>}
                         {!task.archived && <PriorityIndicator priority={task.priority} onClick={handlePriorityChange} />}
                     </div>
 
@@ -459,8 +459,7 @@
                                 value={newTag}
                                 onChange={(e) => setNewTag(e.target.value)}
                                 onKeyDown={(e) => {if (e.key === 'Enter') handleAddTag()}}
-                                placeholder="Add a tag..."
-                                className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow"
+                                placeholder="Add a tag..."                                className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0"
                             />
                             <datalist id="tag-suggestions">
                                 {allTags.map(tag => <option key={tag} value={tag} />)}
@@ -476,8 +475,7 @@
                                 value={reminderInput}
                                 onChange={e => setReminderInput(e.target.value)} 
                                 autoFocus 
-                                placeholder="Set in: MM:SS / SS"
-                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 w-full"/>
+                                placeholder="Set in: MM:SS / SS"                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 flex-1 min-w-0"/>
                             <button onClick={handleSetReminder} className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
                         </div>
                     )}
@@ -703,7 +701,7 @@
     // --- Column & Modal Components ---
     const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, isFocusMode, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
         const priorityStyles = { high: { title: "High", color: "text-red-400" }, medium: { title: "Medium", color: "text-yellow-400" }, low: { title: "Low", color: "text-sky-400" }};
-        const layoutClasses = isVerticalLayout ? 'w-full' : 'w-full md:w-96 flex-shrink-0';
+        const layoutClasses = isVerticalLayout ? 'w-full' : 'flex-1 min-w-0';
         
         return (
             <div className={`flex flex-col h-full bg-slate-900/30 rounded-lg ${layoutClasses}`}>
@@ -711,8 +709,12 @@
                     <span>{priorityStyles[priority].title} Priority ({tasks.length})</span>
                     <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
                 </button>
-                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out overflow-y-auto ${isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-full opacity-100'}`}>
-                    {tasks.map((task) => <div key={task.id} className={`transition-opacity duration-300 ${(isFocusMode && !showArchived && task.status !== 'In Progress') ? 'opacity-20' : 'opacity-100'}`}><MemoizedTaskCard task={task} clockTimezone={clockTimezone} /></div>)}
+                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out overflow-y-auto overflow-x-hidden ${isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-full opacity-100'}`}>
+                    {tasks.map((task) => (
+                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(isFocusMode && !showArchived && task.status !== 'In Progress') ? 'opacity-20' : 'opacity-100'}`}>
+                            <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
+                        </div>
+                    ))}
                 </div>
             </div>
         );
@@ -720,12 +722,16 @@
 
     const TagColumn = React.memo(({ tag, tasks, clockTimezone }) => { // Added clockTimezone
         return (
-            <div className="flex flex-col w-full md:w-96 flex-shrink-0 h-full bg-indigo-900/10 rounded-lg">
+            <div className="flex flex-col flex-1 min-w-0 h-full bg-indigo-900/10 rounded-lg">
                 <div className="flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-400 bg-slate-900/50 flex-shrink-0">
                     <span>{tag} ({tasks.length})</span>
                 </div>
-                <div className="flex-grow p-2 overflow-y-auto">
-                    {tasks.map(task => <div key={task.id}><MemoizedTaskCard task={task} clockTimezone={clockTimezone} /></div>)}
+                <div className="flex-grow p-2 overflow-y-auto overflow-x-hidden">
+                    {tasks.map(task => (
+                        <div key={task.id} className="w-full min-w-0"> {/* Added w-full min-w-0 here */}
+                            <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
+                        </div>
+                    ))}
                 </div>
             </div>
         );
