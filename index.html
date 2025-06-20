@@ -584,7 +584,6 @@
         const { tasks, addTask, archiveTask, settings, setSettings, taskToClose, setTaskToClose, taskToUnarchive, setTaskToUnarchive, taskToDelete, setTaskToDelete, allTags, deleteTask, updateTask, clearArchive } = useAppContext();
         const now = useNow(); // Get current time, updates every second
 
-        const [isFocusMode, setIsFocusMode] = useState(false);
         const [showArchived, setShowArchived] = useState(false);
         const [collapsedColumns, setCollapsedColumns] = useState({ high: false, medium: false, low: false });
         const [showSettings, setShowSettings] = useState(false);
@@ -652,15 +651,8 @@
         const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
         const handleTimezoneChange = () => setClockTimezone(p => ['EST', 'PST', 'UTC'][(['EST', 'PST', 'UTC'].indexOf(p) + 1) % 3]);
         
-        const handleFocusClick = () => {
-            const newFocusState = !isFocusMode;
-            if (newFocusState) setShowArchived(false);
-            setIsFocusMode(newFocusState);
-        };
-
         const handleArchiveClick = () => {
             const newArchiveState = !showArchived;
-            if (newArchiveState) setIsFocusMode(false);
             setShowArchived(newArchiveState);
         };
 
@@ -724,7 +716,7 @@
         }), [priorityTasks, sortFn]);
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
-        const backgroundOverlayClass = isFocusMode ? 'bg-purple-900/10' : showArchived ? 'bg-red-900/10' : '';
+        const backgroundOverlayClass = showArchived ? 'bg-red-900/10' : '';
         
         return (
             <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: `radial-gradient(circle, rgba(15, 23, 42, 0.9), rgba(10, 15, 30, 1)), linear-gradient(135deg, #0f172a 0%, #1e293b 100%)` }}>
@@ -758,9 +750,6 @@
                             >
                                 <BugIcon />
                             </a>
-                        </Tooltip>
-                        <Tooltip text={isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"}>
-                            <button onClick={handleFocusClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 transition-all ${isFocusMode ? 'bg-purple-600 hover:bg-purple-500 focus:ring-purple-400' : 'bg-slate-700 hover:bg-slate-600 focus:ring-slate-500'}`}>{isFocusMode ? 'Exit Focus' : 'Focus Mode'}</button>
                         </Tooltip>
                         <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks"}>
                             <button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button>
@@ -829,7 +818,6 @@
                                 tasks={tasksForThisPriority} 
                                 isCollapsed={isEffectivelyCollapsed} // Use effective state
                                 onToggleCollapse={() => setCollapsedColumns(p => ({...p, [priority]: !p[priority]}))} // Manual toggle
-                                isFocusMode={isFocusMode} 
                                 showArchived={showArchived} 
                                 isVerticalLayout={settings.verticalLayout} 
                                 clockTimezone={clockTimezone} />
@@ -841,7 +829,7 @@
     };
 
     // --- Column & Modal Components ---
-    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, isFocusMode, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
+    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone }) => { // Added clockTimezone
         const priorityStyles = { high: { title: "High", color: "text-red-400" }, medium: { title: "Medium", color: "text-yellow-400" }, low: { title: "Low", color: "text-sky-400" }};
         const columnLayoutClasses = isVerticalLayout ? 'w-full h-auto' : 'flex-1 min-w-0 h-full';
 
@@ -878,7 +866,7 @@
                     }
                 `}>
                     {tasks.map((task) => (
-                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(isFocusMode && !showArchived && task.status !== 'In Progress') ? 'opacity-20' : 'opacity-100'}`}>
+                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(!showArchived && task.status !== 'In Progress' && task.status !== 'To Do' && task.status !== 'On Hold') ? 'opacity-20' : 'opacity-100'}`}>
                             <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
                         </div>
                     ))}
