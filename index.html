@@ -497,7 +497,7 @@
             }
             return currentTasks.filter(task => {
                 if (!task.tags || task.tags.length === 0) return false;
-                return activeTags.some(activeTag => task.tags.includes(activeTag));
+                return activeTags.every(activeTag => task.tags.includes(activeTag));
             });
         }, [currentTasks, activeTags]);
         
