@@ -506,7 +506,7 @@
         const { settings } = useAppContext();
         
         if (!settings.showTooltips) {
-            return <span>{children}</span>;
+            return <div className="relative group flex items-center">{children}</div>;
         }
         
         return (
