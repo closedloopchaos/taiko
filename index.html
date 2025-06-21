@@ -165,6 +165,7 @@
             
             const defaultSettings = {
                 confirmOnDelete: true,
+                showTooltips: true,
                 autoCollapse: true,
                 verticalLayout: false
             };
@@ -501,12 +502,20 @@
         </li>
     ));
 
-    const Tooltip = ({ text, children }) => (
-        <div className="relative group flex items-center">
-            {children}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap bg-slate-700 text-white text-xs font-mono rounded-md py-1 px-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">{text}</div>
-        </div>
-    );
+    const Tooltip = ({ text, children }) => {
+        const { settings } = useAppContext();
+        
+        if (!settings.showTooltips) {
+            return <span>{children}</span>;
+        }
+        
+        return (
+            <div className="relative group flex items-center">
+                {children}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap bg-slate-700 text-white text-xs font-mono rounded-md py-1 px-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">{text}</div>
+            </div>
+        );
+    };
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone }) => { // Added clockTimezone prop
@@ -1543,6 +1552,12 @@
                             <label className="text-slate-300">Confirm on Delete</label>
                             <Tooltip text={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"}>
                                 <button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </Tooltip>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-slate-300">Show Tooltips</label>
+                            <Tooltip text={settings.showTooltips ? "Disable Tooltips" : "Enable Tooltips"}>
+                                <button onClick={() => handleToggle('showTooltips')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.showTooltips ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.showTooltips ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                             </Tooltip>
                         </div>
                         <div className="flex items-center justify-between">
