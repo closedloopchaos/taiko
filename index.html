@@ -254,7 +254,8 @@
                 archived: false,
                 rank: tasks.filter(t => t.priority === initialPriority && !t.archived).length, // Rank will be based on the current priority value
                 timestamp: new Date().toISOString(), 
-                startedAt: null, 
+                startedAt: null,
+                notes: '', // Add a notes field
                 totalElapsedTimeInSeconds: 0,
                 reminderAt: null, 
                 reminderFired: false, 
@@ -490,17 +491,42 @@
     });
 
     // --- UI Components ---
-    const ChecklistItem = React.memo(({ item, onUpdate, onDelete }) => (
-        <li className="flex items-center space-x-2 group">
-            <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
-            <input type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} />
-            <Tooltip text="Delete item">
-                <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-            </Tooltip>
-        </li>
-    ));
+    const ChecklistItem = React.memo(({ item, onUpdate, onDelete, onAddNewItemAfter, isFocused, onFocusHandled }) => {
+        const inputRef = useRef(null);
+
+        useEffect(() => {
+            if (isFocused && inputRef.current) {
+                inputRef.current.focus();
+                onFocusHandled(); // Important to prevent re-focusing on every render
+            }
+        }, [isFocused, onFocusHandled]);
+
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onAddNewItemAfter(item.id);
+            }
+        };
+
+        return (
+            <li className="flex items-center space-x-2 group">
+                <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
+                <input 
+                    ref={inputRef}
+                    type="text" 
+                    value={item.text} 
+                    onChange={e => onUpdate(item.id, { text: e.target.value })} 
+                    onKeyDown={handleKeyDown}
+                    className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} 
+                />
+                <Tooltip text="Delete item">
+                    <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </Tooltip>
+            </li>
+        );
+    });
 
     const Tooltip = ({ text, children }) => {
         const { settings } = useAppContext();
@@ -529,6 +555,12 @@
         const [checklist, setChecklist] = useState(task.checklist || []);
         const [newTag, setNewTag] = useState('');
         const [tagError, setTagError] = useState('');
+        // State for task notes
+        const [notes, setNotes] = useState(task.notes || '');
+        // State for notes visibility
+        const [isNotesExpanded, setIsNotesExpanded] = useState(false);
+        // State to manage which checklist item should be focused
+        const [focusedItemId, setFocusedItemId] = useState(null);
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
         useEffect(() => { setTitle(task.title); }, [task.title]);
@@ -541,6 +573,7 @@
                 return () => clearTimeout(timer);
             }
         }, [tagError]);
+        useEffect(() => { setNotes(task.notes || ''); }, [task.notes]); // Sync notes state with prop
         
         const handleDeleteRequest = useCallback(() => {
             if (settings.confirmOnDelete) {
@@ -590,8 +623,22 @@
         
         const handleItemUpdate = (id, values) => handleUpdateChecklist(checklist.map(i => i.id === id ? { ...i, ...values } : i));
         const handleItemDelete = (id) => handleUpdateChecklist(checklist.filter(i => i.id !== id));
-        const handleAddItem = () => handleUpdateChecklist([...checklist, { id: crypto.randomUUID(), text: 'New item', completed: false }]);
+        const handleAddItem = () => {
+            const newId = crypto.randomUUID();
+            setFocusedItemId(newId); // Set the new item to be focused
+            handleUpdateChecklist([...checklist, { id: newId, text: '', completed: false }]);
+        };
+        const handleAddNewItemAfter = useCallback((currentItemId) => {
+            const newId = crypto.randomUUID();
+            setFocusedItemId(newId); // Set the ID of the new item to be focused
+            const currentIndex = checklist.findIndex(i => i.id === currentItemId);
+            const newChecklist = [...checklist];
+            // Insert the new item right after the current one
+            newChecklist.splice(currentIndex + 1, 0, { id: newId, text: '', completed: false });
+            handleUpdateChecklist(newChecklist);
+        }, [checklist, handleUpdateChecklist]);
         const handleTitleBlur = () => { setIsEditingTitle(false); if (title !== task.title) updateTask(task.id, { title }); };
+        const handleTitleKeyDown = (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTitleBlur(); } };
         
         const handleAddTag = () => {
             const currentTags = task.tags || [];
@@ -668,6 +715,18 @@
             setIsSettingReminder(false);
             setReminderInput(''); // Clear input after setting
         }, [reminderInput, task.id, updateTask, setIsSettingReminder, setReminderInput]);
+
+        const handleReminderKeyDown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleSetReminder(); }
+        };
+
+        const handleNotesKeyDown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                updateTask(task.id, { notes }); // Save notes
+                setIsNotesExpanded(false); // Collapse view
+            }
+        };
         
         const handleSetPriorityTag = (priorityConstantToSet) => { // e.g., PRIORITIES.HIGH or null
             let currentTaskTags = task.tags || [];
@@ -719,7 +778,7 @@
                 <div className="p-2">
                     <div className="flex justify-between items-start mb-2">
                         {isEditingTitle ? (
-                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" />
+                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" />
                         ) : ( // Priority Indicator removed from here
                             <Tooltip text="Double-click to edit title">
                                 <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>
@@ -728,11 +787,53 @@
                         {/* Priority Indicator removed from here */}
                     </div>
 
-                    <ul className="space-y-1 my-2">{checklist.map(item => <ChecklistItem key={item.id} item={item} onUpdate={handleItemUpdate} onDelete={handleItemDelete} />)}</ul>
+                    <ul className="space-y-1 my-2">{checklist.map(item => 
+                        <ChecklistItem 
+                            key={item.id} 
+                            item={item} 
+                            onUpdate={handleItemUpdate} 
+                            onDelete={handleItemDelete} 
+                            onAddNewItemAfter={handleAddNewItemAfter}
+                            isFocused={focusedItemId === item.id}
+                            onFocusHandled={() => setFocusedItemId(null)}
+                        />
+                    )}</ul>
                     <Tooltip text="Add a new checklist item">
                         <button onClick={handleAddItem} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50">+ Add item</button>
                     </Tooltip>
 
+                    {/* --- Notes Section --- */}
+                    <div className="mt-3 pt-2 border-t border-slate-700/50">
+                        {isNotesExpanded ? (
+                            <>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label htmlFor={`notes-${task.id}`} className="block text-xs text-slate-400">Notes:</label>
+                                    <Tooltip text="Collapse notes section">
+                                        <button onClick={() => setIsNotesExpanded(false)} className="text-xs text-sky-400 hover:text-sky-300">Collapse</button>
+                                    </Tooltip>
+                                </div>
+                                <textarea
+                                    id={`notes-${task.id}`}
+                                    value={notes}
+                                    onChange={e => setNotes(e.target.value)}
+                                    onBlur={() => updateTask(task.id, { notes })}
+                                    onKeyDown={handleNotesKeyDown}
+                                    placeholder="Add detailed notes here..."
+                                    className="w-full bg-slate-900/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 resize-y min-h-[60px]"
+                                    autoFocus
+                                ></textarea>
+                            </>
+                        ) : (
+                            <div className="flex justify-between items-center min-h-[24px]"> {/* Set min-height to prevent layout shift */}
+                                {notes ? (
+                                    <p className="text-sm text-slate-400 truncate flex-1 pr-2"><span className="font-semibold text-slate-300">Note:</span> {notes.split('\n')[0]}</p>
+                                ) : (
+                                    <p className="text-sm text-slate-500 italic">No notes for this task.</p>
+                                )}
+                                <Tooltip text={notes ? 'View or edit notes' : 'Add notes'}><button onClick={() => setIsNotesExpanded(true)} className="text-xs text-sky-400 hover:text-sky-300 flex-shrink-0">{notes ? 'View/Edit' : 'Add Note'}</button></Tooltip>
+                            </div>
+                        )}
+                    </div>
                     {/* --- Tagging UI --- */}
                     <div className="mt-3 pt-2 border-t border-slate-700/50">
                         <div className="flex flex-wrap items-center gap-1 mb-2">
@@ -789,7 +890,8 @@
                             <input 
                                 type="text" 
                                 value={reminderInput}
-                                onChange={e => setReminderInput(e.target.value)} 
+                                onChange={e => setReminderInput(e.target.value)}
+                                onKeyDown={handleReminderKeyDown}
                                 autoFocus 
                                 placeholder="Set in: MM:SS / SS"                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 flex-1 min-w-0"/>
                             <Tooltip text="Set reminder from input">
