@@ -38,18 +38,6 @@
 </head>
 <body>
     <div id="root"></div>
-    
-    <footer class="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40">
-        <div class="flex items-center justify-center space-x-1.5">
-            <span>Courtesy of</span>
-            <a href="https://github.com/closedloopchaos" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-sky-400 hover:text-sky-300 font-semibold hover:underline">
-                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-                </svg>
-                closedloopchaos
-            </a>
-        </div>
-    </footer>
 
     <!-- React Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -63,7 +51,33 @@
 
     const { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } = React;
 
+
+    // -----------------------------------------------------------------------------------------------------------------------------  THIS IS WHERE THE RELEASE NOTES ARE -----------------------------------------------------------------------------------------------------------------------------
     // --- Global Constants & Configurations ---
+    const CURRENT_APP_VERSION = '1.2.0';
+
+    const RELEASE_NOTES = {
+        '1.2.0': {
+            title: "What's New in Version 1.2.0",
+            notes: [
+                {
+                    title: "🎨 Major UI Redesign: Task Cards",
+                    description: "Task cards have been completely redesigned for better clarity and functionality, featuring a cleaner layout and a new way to manage status."
+                },
+                {
+                    title: "📝 Feature: Detailed Task Notes",
+                    description: "You can now add, edit, and view multi-line notes directly within each task card. The notes section is expandable and auto-saves your content."
+                },
+                {
+                    title: "🚀 Feature: Completed Task Summary",
+                    description: "Generate a detailed, timezone-aware summary of all completed tasks, including their notes and subtasks. Find the new document icon in the header!"
+                }
+            ]
+        }
+        // Future versions can be added here
+    };
+
+
     const PRIORITIES = { // These are the internal constant values
         LOW: 'PRIORITY_LOW', // Actual tag string
         MEDIUM: 'PRIORITY_MEDIUM',
@@ -300,10 +314,14 @@
             setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
         }, []);
 
+        const deleteAllCompletedTasks = useCallback(() => {
+            setTasks(prevTasks => prevTasks.filter(task => task.status !== TASK_STATUS.DONE));
+        }, []);
+
         const allTags = useMemo(() => {
-            // allTags should only contain actual custom tags from the currently visible tasks.
+            // allTags should contain all custom tags from ALL tasks to ensure swimlane management is always complete.
             const customTagsSet = new Set();
-            currentTasks.forEach(task => { // Iterate over currently visible tasks
+            tasks.forEach(task => { // Iterate over all tasks
                 (task.tags || []).forEach(tag => {
                     // Check if the tag is a priority display title (case-insensitive)
                     const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
@@ -314,8 +332,8 @@
                     }
                 });
             });
-            return Array.from(customTagsSet).sort();
-        }, [currentTasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Depends on the currently visible tasks
+            return Array.from(customTagsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Depends on all tasks now
 
         // --- Swimlane Collapse Management ---
         const expandSwimlane = useCallback((swimlaneName) => {
@@ -327,7 +345,7 @@
 
 
         const contextValue = useMemo(() => ({
-            tasks, updateTask, addTask, deleteTask,
+            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks,
             settings, setSettings, allTags, 
             taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
@@ -339,7 +357,7 @@
             toggleSwimlaneCollapse,
             showCompleted, setShowCompleted, currentTasks
         }), [
-            tasks, updateTask, addTask, deleteTask,
+            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks,
             settings, setSettings, allTags, 
             taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
@@ -422,6 +440,11 @@
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+        </svg>
+    ));
+    const DocumentTextIcon = React.memo(() => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
     ));
     const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
@@ -953,7 +976,7 @@
         const { 
             tasks, addTask, 
             settings, setSettings,
-            taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, 
+            taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
             allTags, deleteTask, updateTask, // Core data functions
             activeTags, setActiveTags,                     // Filter state
             activeSwimlanes, setActiveSwimlanes,           // Swimlane visibility state
@@ -973,10 +996,31 @@
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
         const [draggedSwimlane, setDraggedSwimlane] = useState(null); // For swimlane reordering
 
+        // State for the summary modal
+        const [showSummaryModal, setShowSummaryModal] = useState(false);
+        const [summaryText, setSummaryText] = useState('');
+        const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
+        const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
+
+
         // State for the main "Add Task" input in the header
         const [showMainAddTaskInput, setShowMainAddTaskInput] = useState(false);
 
         const prevTasks = usePrevious(currentTasks);
+
+        // --- Effect for showing release notes once per version ---
+        useEffect(() => {
+            const lastSeenVersion = localStorage.getItem('taiko-app-local-lastSeenVersion');
+            if (lastSeenVersion !== CURRENT_APP_VERSION) {
+                setShowReleaseNotesModal(true);
+            }
+        }, []); // Run only once on mount
+
+        const handleCloseReleaseNotes = () => {
+            setShowReleaseNotesModal(false);
+            localStorage.setItem('taiko-app-local-lastSeenVersion', CURRENT_APP_VERSION);
+        };
+
 
         useEffect(() => {
             // Ensure that when the view switches between active and archived,
@@ -985,6 +1029,8 @@
         }, [currentTasks]);
 
         const allTasksCount = useMemo(() => currentTasks.length, [currentTasks]);
+
+        const completedTasksCount = useMemo(() => tasks.filter(t => t.status === TASK_STATUS.DONE).length, [tasks]);
 
         const priorityFilterCounts = useMemo(() => {
             const counts = {};
@@ -1050,6 +1096,11 @@
             setTaskToComplete(null);
         }, [taskToComplete, updateTask]);
 
+        const handleConfirmDeleteAllCompleted = useCallback(() => {
+            deleteAllCompletedTasks();
+            setShowDeleteAllCompletedModal(false);
+        }, [deleteAllCompletedTasks]);
+
 
         const handleAddTask = () => { 
             setShowMainAddTaskInput(true); // Show the input form instead of adding directly
@@ -1061,6 +1112,62 @@
             setShowCompleted(newCompletedState);
         };
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
+
+        const generateCompletedTasksSummary = useCallback(() => {
+            const completedTasks = tasks.filter(t => t.status === TASK_STATUS.DONE)
+                                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by completion time
+            
+            const timeZone = TIMEZONE_MAP[clockTimezone] || 'UTC';
+            const localeOptions = {
+                year: 'numeric', month: 'numeric', day: 'numeric',
+                hour: 'numeric', minute: 'numeric', second: 'numeric',
+                hour12: true,
+                timeZone: timeZone
+            };
+
+            
+            let summary;
+            if (completedTasks.length === 0) {
+                summary = "No tasks have been completed yet.";
+            } else {
+                summary = `--- Completed Tasks Summary ---\n`;
+                summary += `Total Completed: ${completedTasks.length}\n`;
+                summary += `Generated on: ${new Date().toLocaleString('en-US', localeOptions)} ${clockTimezone}\n\n`;
+                summary += "========================================\n\n";
+
+                completedTasks.forEach(task => {
+                    summary += `TASK: ${task.title}\n`;
+                    
+                    const priorityTitle = PRIORITY_CONFIG[task.priority]?.title || PRIORITY_CONFIG.null.title;
+                    summary += `Priority: ${priorityTitle}\n`;
+                    
+                    summary += `Completed On: ${new Date(task.timestamp).toLocaleString('en-US', localeOptions)} ${clockTimezone}\n`;
+
+                    if (task.notes && task.notes.trim()) {
+                        summary += `\n  Notes:\n`;
+                        summary += `    ${task.notes.trim().replace(/\n/g, '\n    ')}\n`; // Indent notes
+                    } else {
+                        summary += `\n  Notes:\n    No notes.\n`;
+                    }
+
+                    const validSubtasks = (task.checklist || []).filter(item => item.text && item.text.trim() !== '');
+
+                    if (validSubtasks.length > 0) {
+                        summary += `\n  Subtasks:\n`;
+                        validSubtasks.forEach(item => {
+                            summary += `    [${item.completed ? 'x' : ' '}] ${item.text}\n`;
+                        });
+                    } else {
+                        summary += `\n  Subtasks:\n    No subtasks.\n`;
+                    }
+
+                    summary += "\n========================================\n\n";
+                });
+            }
+            setSummaryText(summary);
+            setShowSummaryModal(true);
+        }, [tasks, clockTimezone]); // Dependency on `tasks` and `clockTimezone` state
+
         useEffect(() => {
             if (settings.autoCollapse) {
                 // Use the functional update form of setActiveSwimlanes
@@ -1232,6 +1339,9 @@
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                 {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
                 {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={activeSwimlanes} setSwimlanes={setActiveSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
+                {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
+                {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
+                {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
 
                 <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
                     <div className="flex items-center space-x-4">
@@ -1255,6 +1365,18 @@
                             >
                                 <BugIcon />
                             </a>
+                        </Tooltip>
+                        <Tooltip text="Generate Summary of Completed Tasks">
+                            <button onClick={generateCompletedTasksSummary} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors">
+                                <DocumentTextIcon />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Delete All Completed Tasks">
+                            {showCompleted && completedTasksCount > 0 && (
+                                <button onClick={() => setShowDeleteAllCompletedModal(true)} className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors">
+                                    <DeleteIcon />
+                                </button>
+                            )}
                         </Tooltip>
                         <Tooltip text={showCompleted ? "View Active Tasks" : "View Completed Tasks"}>
                             <button onClick={handleCompletedClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showCompleted ? 'bg-green-600 hover:bg-green-500 focus:ring-green-400' : 'bg-slate-700'}`}>{showCompleted ? 'View Active' : 'View Completed'}</button>
@@ -1391,6 +1513,7 @@
                         </>
                     )}
                 </main>
+                <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
             </div>
         );
     };
@@ -1578,6 +1701,28 @@
         );
     });
 
+    const Footer = React.memo(({ onShowReleaseNotes }) => {
+        return (
+            <footer className="bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40 flex-shrink-0">
+                <div className="flex items-center justify-center space-x-4">
+                    <div className="flex items-center justify-center space-x-1.5">
+                        <span>Courtesy of</span>
+                        <a href="https://github.com/closedloopchaos" target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sky-400 hover:text-sky-300 font-semibold hover:underline">
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                            </svg>
+                            closedloopchaos
+                        </a>
+                    </div>
+                    <div className="border-l border-slate-600 h-5"></div>
+                    <button onClick={onShowReleaseNotes} className="text-sky-400 hover:text-sky-300 font-semibold hover:underline">
+                        Release Notes (v{CURRENT_APP_VERSION})
+                    </button>
+                </div>
+            </footer>
+        );
+    });
+
     const QuickAddInputForm = React.memo(({ onAdd, onCancel, placeholder = "New task title..." }) => {
         const [internalValue, setInternalValue] = useState('');
         const inputRef = useRef(null);
@@ -1646,6 +1791,11 @@
     );
     const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><Tooltip text="Keep task active"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm completion"><button onClick={onConfirm} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></Tooltip></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
+    const DeleteAllCompletedModal = ({ onConfirm, onCancel, count }) => (
+        <Modal onClose={onCancel}>
+            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion of all completed tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></Tooltip></div></div>
+        </Modal>
+    );
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         return ( 
@@ -1722,6 +1872,72 @@
         );
     };
 
+    const SummaryModal = ({ summary, onClose }) => {
+        const [copyButtonText, setCopyButtonText] = useState('Copy to Clipboard');
+
+        const handleCopy = useCallback(() => {
+            if (!navigator.clipboard) {
+                console.error('Clipboard API not available.');
+                setCopyButtonText('Copy failed');
+                setTimeout(() => setCopyButtonText('Copy to Clipboard'), 2000);
+                return;
+            }
+            navigator.clipboard.writeText(summary).then(() => {
+                setCopyButtonText('Copied!');
+                playTone(880, 0.1, 'sine', 0.2); // Success sound
+                setTimeout(() => setCopyButtonText('Copy to Clipboard'), 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                setCopyButtonText('Failed to copy');
+                playTone(220, 0.2, 'square', 0.2); // Error sound
+                setTimeout(() => setCopyButtonText('Copy to Clipboard'), 2000);
+            });
+        }, [summary]);
+
+        return (
+            <Modal onClose={onClose}>
+                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
+                        <h3 className="text-xl font-bold">Completed Tasks Summary</h3>
+                        <div className="flex items-center space-x-2">
+                            <Tooltip text="Copy summary to your clipboard">
+                                <button onClick={handleCopy} className="px-3 py-1 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm transition-all duration-150 w-36 text-center">{copyButtonText}</button>
+                            </Tooltip>
+                            <Tooltip text="Close this summary">
+                                <button onClick={onClose} className="px-4 py-1 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Done</button>
+                            </Tooltip>
+                        </div>
+                    </div>
+                    <div className="p-4 overflow-y-auto"><pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-4 rounded-md border border-slate-700">{summary}</pre></div>
+                </div>
+            </Modal>
+        );
+    };
+
+    const ReleaseNotesModal = ({ version, releaseInfo, onClose }) => {
+        if (!releaseInfo) return null;
+
+        return (
+            <Modal onClose={onClose}>
+                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
+                        <h3 className="text-xl font-bold">{releaseInfo.title}</h3>
+                        <Tooltip text="Close Release Notes">
+                            <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm">Got it!</button>
+                        </Tooltip>
+                    </div>
+                    <div className="p-6 overflow-y-auto space-y-4">
+                        {releaseInfo.notes.map((note, index) => (
+                            <div key={index} className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-sky-300 mb-1">{note.title}</h4>
+                                <p className="text-sm text-slate-300">{note.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Modal>
+        );
+    };
 
     // --- App Entry Point ---
     const AppContainer = () => {
