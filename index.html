@@ -97,7 +97,32 @@
     const TASK_STATUS = { TO_DO: 'To Do', IN_PROGRESS: 'In Progress', ON_HOLD: 'On Hold', DONE: 'Done' };
     const TIMEZONE_MAP = { EST: 'America/New_York', PST: 'America/Los_Angeles', UTC: 'UTC' };
     const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
-    const TASK_STATUS_CONFIG = { [TASK_STATUS.TO_DO]: { color: 'bg-sky-500', label: 'To Do' }, [TASK_STATUS.IN_PROGRESS]: { color: 'bg-yellow-500', label: 'In Progress' }, [TASK_STATUS.ON_HOLD]: { color: 'bg-slate-500', label: 'On Hold' }, [TASK_STATUS.DONE]: { color: 'bg-green-500', label: 'Done' } };
+    const TASK_STATUS_CONFIG = {
+        [TASK_STATUS.TO_DO]: { 
+            label: 'To Do', 
+            selectBgColor: 'bg-sky-900/50', 
+            accentClass: 'bg-sky-400',
+            glowClass: 'shadow-[0_0_15px_-4px_rgba(56,189,248,0.5)] hover:shadow-[0_0_18px_-3px_rgba(56,189,248,0.7)]'
+        },
+        [TASK_STATUS.IN_PROGRESS]: { 
+            label: 'In Progress', 
+            selectBgColor: 'bg-yellow-900/50', 
+            accentClass: 'bg-amber-400',
+            glowClass: 'shadow-[0_0_15px_-4px_rgba(251,191,36,0.5)] hover:shadow-[0_0_18px_-3px_rgba(251,191,36,0.7)]'
+        },
+        [TASK_STATUS.ON_HOLD]: { 
+            label: 'On Hold', 
+            selectBgColor: 'bg-slate-700/50', 
+            accentClass: 'bg-slate-500',
+            glowClass: 'shadow-[0_0_15px_-4px_rgba(100,116,139,0.4)] hover:shadow-[0_0_18px_-3px_rgba(100,116,139,0.6)]'
+        },
+        [TASK_STATUS.DONE]: { 
+            label: 'Done', 
+            selectBgColor: 'bg-green-900/50', 
+            accentClass: 'bg-green-500',
+            glowClass: 'shadow-[0_0_12px_-5px_rgba(34,197,94,0.5)]' // More subtle glow for "Done"
+        }
+    };
 
     // --- Web Audio API Sound Generation ---
     let audioContext = null;
@@ -145,17 +170,15 @@
         });
 
         // --- Modal-related State ---
-        const [taskToClose, setTaskToClose] = useState(null);
-        const [taskToUnarchive, setTaskToUnarchive] = useState(null);
+        const [taskToComplete, setTaskToComplete] = useState(null);
         const [taskToDelete, setTaskToDelete] = useState(null);
         // --- UI Interaction State (lifted from App) ---
+        const [showCompleted, setShowCompleted] = useState(false);
         const [activeTags, setActiveTags] = useState([]);
         const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved from App
         const [activeSwimlanes, setActiveSwimlanes] = useState([]);
         const [collapsedColumns, setCollapsedColumns] = useState({ 'unsorted': false }); // For fixed columns like "Unsorted"
 
-        // No new state needed here for clear archive modal, will be in App.js
-        
         const appId = 'taiko-app-local';
 
         // --- Local Storage Persistence ---
@@ -182,6 +205,9 @@
             } else {
                 setSettings(defaultSettings); // No saved settings, use defaults
             }
+
+            const savedShowCompleted = localStorage.getItem(`${appId}-showCompleted`);
+            if (savedShowCompleted) try { setShowCompleted(JSON.parse(savedShowCompleted)); } catch { console.error("Could not parse saved showCompleted state."); setShowCompleted(false); }
 
             const savedActiveTags = localStorage.getItem(`${appId}-activeTags`);
             if (savedActiveTags) try { setActiveTags(JSON.parse(savedActiveTags)); } catch { console.error("Could not parse saved active tags."); setActiveTags([]); }
@@ -215,6 +241,10 @@
         }, [settings]);
 
         useEffect(() => {
+            localStorage.setItem(`${appId}-showCompleted`, JSON.stringify(showCompleted));
+        }, [showCompleted, appId]);
+
+        useEffect(() => {
             localStorage.setItem(`${appId}-activeTags`, JSON.stringify(activeTags));
         }, [activeTags, appId]);
 
@@ -237,6 +267,9 @@
             }
         }, []);
 
+        // --- Derived State ---
+        const currentTasks = useMemo(() => showCompleted ? tasks.filter(t => t.status === TASK_STATUS.DONE) : tasks.filter(t => t.status !== TASK_STATUS.DONE), [tasks, showCompleted]);
+
         // --- Core Data Actions ---
         const updateTask = useCallback((id, updatedFields) => {
             setTasks(prevTasks => prevTasks.map(task => 
@@ -250,8 +283,7 @@
                 title: initialTitle, 
                 checklist: [],
                 priority: initialPriority, 
-                status: 'To Do', 
-                archived: false,
+                status: 'To Do',
                 rank: tasks.filter(t => t.priority === initialPriority && !t.archived).length, // Rank will be based on the current priority value
                 timestamp: new Date().toISOString(), 
                 startedAt: null,
@@ -268,29 +300,10 @@
             setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
         }, []);
 
-        const archiveTask = useCallback((id, isArchived) => {
-            setTasks(prevTasks => prevTasks.map(task => {
-                if (task.id === id) {
-                    const updates = { archived: isArchived };
-                    if (isArchived && task.status === 'In Progress' && task.startedAt) {
-                        updates.totalElapsedTimeInSeconds = (task.totalElapsedTimeInSeconds || 0) + ((new Date().getTime() - new Date(task.startedAt).getTime()) / 1000);
-                        updates.startedAt = null;
-                    }
-                    return { ...task, ...updates };
-                }
-                return task;
-            }));
-        }, []);
-        
-        const clearArchive = useCallback(() => {
-            // This will remove all tasks that are marked as archived
-            setTasks(prevTasks => prevTasks.filter(task => !task.archived));
-        }, []);
-
         const allTags = useMemo(() => {
-            // allTags should only contain actual custom tags, not priority display titles.
+            // allTags should only contain actual custom tags from the currently visible tasks.
             const customTagsSet = new Set();
-            tasks.forEach(task => { // Iterate over all tasks for comprehensive tag discovery
+            currentTasks.forEach(task => { // Iterate over currently visible tasks
                 (task.tags || []).forEach(tag => {
                     // Check if the tag is a priority display title (case-insensitive)
                     const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
@@ -302,7 +315,7 @@
                 });
             });
             return Array.from(customTagsSet).sort();
-        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // PRIORITY_DISPLAY_TITLES_ARRAY is stable
+        }, [currentTasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Depends on the currently visible tasks
 
         // --- Swimlane Collapse Management ---
         const expandSwimlane = useCallback((swimlaneName) => {
@@ -314,28 +327,28 @@
 
 
         const contextValue = useMemo(() => ({
-            tasks, updateTask, addTask, deleteTask, archiveTask, clearArchive,
-            settings, setSettings, allTags,
-            taskToClose, setTaskToClose,
-            taskToUnarchive, setTaskToUnarchive,
+            tasks, updateTask, addTask, deleteTask,
+            settings, setSettings, allTags, 
+            taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
             activeTags, setActiveTags,
             activeSwimlanes, setActiveSwimlanes,
             collapsedTagSwimlanes, setCollapsedTagSwimlanes,
             collapsedColumns, setCollapsedColumns, // Added for fixed columns
             expandSwimlane,        
-            toggleSwimlaneCollapse 
+            toggleSwimlaneCollapse,
+            showCompleted, setShowCompleted, currentTasks
         }), [
-            tasks, updateTask, addTask, deleteTask, archiveTask, clearArchive,
-            settings, setSettings, allTags,
-            taskToClose, setTaskToClose,
-            taskToUnarchive, setTaskToUnarchive,
+            tasks, updateTask, addTask, deleteTask,
+            settings, setSettings, allTags, 
+            taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
             activeTags, setActiveTags,
             activeSwimlanes, setActiveSwimlanes,
             collapsedTagSwimlanes, setCollapsedTagSwimlanes,
             collapsedColumns, setCollapsedColumns,
-            expandSwimlane, toggleSwimlaneCollapse
+            expandSwimlane, toggleSwimlaneCollapse,
+            showCompleted, currentTasks
         ]);
         
         return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -392,8 +405,6 @@
     const DISPLAY_PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For UI column display - CHANGED ORDER
 
     // --- Icon Components (Memoized) ---
-    const ArchiveIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>);
-    const RestoreIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15l4 4 4-4M4 4h16v4H4z" /></svg>);
     const DeleteIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>);
     const BellIcon = React.memo(({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>);
     const ChevronDownIcon = React.memo(({ className }) => (
@@ -466,13 +477,13 @@
         return <span className="text-xs font-mono bg-slate-700/50 text-amber-300 px-2 py-1 rounded">{elapsed}</span>;
     });
 
-    // --- Reminder Countdown Component (Re-added) ---
+    // --- Reminder Countdown Component ---
     const ReminderCountdown = React.memo(({ reminderAt }) => {
         const [countdown, setCountdown] = useState('');
         const now = useNow(); // Use the existing useNow hook
 
         const formatCountdown = useCallback((ms) => {
-            if (ms <= 0) return 'Due!';
+            if (ms <= 0) return 'Due!'; // Or '00:00:00' if you prefer
             const totalSeconds = Math.max(0, Math.floor(ms / 1000));
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -491,7 +502,7 @@
     });
 
     // --- UI Components ---
-    const ChecklistItem = React.memo(({ item, onUpdate, onDelete, onAddNewItemAfter, isFocused, onFocusHandled }) => {
+    const ChecklistItem = React.memo(({ item, onUpdate, onDelete, onAddNewItemAfter, isFocused, onFocusHandled, isLocked }) => {
         const inputRef = useRef(null);
 
         useEffect(() => {
@@ -510,17 +521,18 @@
 
         return (
             <li className="flex items-center space-x-2 group">
-                <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer" />
+                <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} disabled={isLocked} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" />
                 <input 
                     ref={inputRef}
                     type="text" 
                     value={item.text} 
                     onChange={e => onUpdate(item.id, { text: e.target.value })} 
                     onKeyDown={handleKeyDown}
-                    className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700`} 
+                    readOnly={isLocked}
+                    className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700 read-only:cursor-default`} 
                 />
                 <Tooltip text="Delete item">
-                    <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => onDelete(item.id)} disabled={isLocked} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </Tooltip>
@@ -545,8 +557,9 @@
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone }) => { // Added clockTimezone prop
-        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete, setActiveTags, setActiveSwimlanes, expandSwimlane, activeTags } = useAppContext();
+        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, setTaskToComplete, setActiveTags, setActiveSwimlanes, expandSwimlane, activeTags } = useAppContext();
         const now = useNow();
+        const isLocked = task.status === TASK_STATUS.DONE;
 
         const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
         const [title, setTitle] = useState(task.title);
@@ -594,42 +607,10 @@
         }, [task.id, settings.confirmOnDelete, deleteTask, setTaskToDelete]);
 
         const handleUpdateChecklist = useCallback((updatedList) => {
-            const completedItems = updatedList.filter(item => item.completed).length;
-            let newStatus = task.status; // Start with current status
-
-            if (updatedList.length > 0 && completedItems === updatedList.length) {
-                // All items checked
-                newStatus = TASK_STATUS.DONE;
-            } else if (completedItems > 0) {
-                // At least one item is checked, but not all
-                if (task.status === TASK_STATUS.TO_DO || task.status === TASK_STATUS.ON_HOLD) {
-                    newStatus = TASK_STATUS.IN_PROGRESS; // Move from To Do or On Hold to In Progress
-                } else if (task.status === TASK_STATUS.DONE) {
-                    newStatus = TASK_STATUS.IN_PROGRESS; // Move from Done to In Progress if an item is unchecked
-                }
-                // If already IN_PROGRESS and some items are checked (but not all), it remains IN_PROGRESS.
-            } else if (completedItems === 0 && updatedList.length > 0) {
-                // All items are unchecked (and there are items)
-                if (task.status === TASK_STATUS.IN_PROGRESS) {
-                    newStatus = TASK_STATUS.TO_DO; // Move from In Progress to To Do
-                }
-                // If ON_HOLD and all items become unchecked, it remains ON_HOLD by default.
-            }
-            let updates = { checklist: updatedList };
-            
-            if (newStatus !== task.status) {
-                updates.status = newStatus;
-                if (newStatus === TASK_STATUS.IN_PROGRESS && [TASK_STATUS.TO_DO, TASK_STATUS.ON_HOLD, TASK_STATUS.DONE].includes(task.status)) {
-                    updates.startedAt = new Date().toISOString();
-                }
-                if (task.status === TASK_STATUS.IN_PROGRESS && [TASK_STATUS.DONE, TASK_STATUS.ON_HOLD, TASK_STATUS.TO_DO].includes(newStatus) && task.startedAt) {
-                    updates.totalElapsedTimeInSeconds = (task.totalElapsedTimeInSeconds || 0) + ((new Date().getTime() - new Date(task.startedAt).getTime()) / 1000);
-                    updates.startedAt = null;
-                }
-                if (newStatus === TASK_STATUS.TO_DO && task.totalElapsedTimeInSeconds > 0) updates.totalElapsedTimeInSeconds = 0;
-            }
-            updateTask(task.id, updates);
-        }, [task, updateTask]);
+            // Checklist updates no longer automatically change task status.
+            // Status is now manually set via the dropdown.
+            updateTask(task.id, { checklist: updatedList });
+        }, [task.id, updateTask]);
         
         const handleItemUpdate = (id, values) => handleUpdateChecklist(checklist.map(i => i.id === id ? { ...i, ...values } : i));
         const handleItemDelete = (id) => handleUpdateChecklist(checklist.filter(i => i.id !== id));
@@ -778,20 +759,16 @@
                 expandSwimlane(newPriorityDisplayTitle);
             }
         };
+
+        const handleStatusChange = (e) => {
+            const newStatus = e.target.value;
+            if (newStatus === TASK_STATUS.DONE) {
+                setTaskToComplete(task); // Show confirmation modal
+            } else {
+                updateTask(task.id, { status: newStatus }); // Update directly for other statuses
+            }
+        };
         
-
-
-        const handlePauseTask = () => {
-            if (!task.startedAt) return;
-            const elapsed = (new Date().getTime() - new Date(task.startedAt).getTime()) / 1000;
-            updateTask(task.id, { status: TASK_STATUS.ON_HOLD, totalElapsedTimeInSeconds: (task.totalElapsedTimeInSeconds || 0) + elapsed, startedAt: null });
-        };
-
-        const statusActions = {
-            [TASK_STATUS.TO_DO]: () => updateTask(task.id, { status: TASK_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() }),
-            [TASK_STATUS.IN_PROGRESS]: handlePauseTask,
-            [TASK_STATUS.ON_HOLD]: () => updateTask(task.id, { status: TASK_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() }),
-        };
 
         // Pulse should continue as long as the reminder time has passed,
         // regardless of whether the notification itself has fired.
@@ -799,18 +776,17 @@
         const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || '') : '';
 
         return (
-            <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-lg border border-slate-700 rounded-lg shadow-lg mb-4 ${pulseClass}`}>
-                <div className={`w-full py-1 rounded-t-lg ${TASK_STATUS_CONFIG[task.status]?.color || 'bg-gray-500'} flex items-center justify-center text-xs font-bold text-white`}>{task.status}</div>
-                <div className="p-2">
+            <div className={`w-full min-w-0 bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-lg shadow-lg mb-4 transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''}`}>
+                <div className={`h-1.5 rounded-t-lg ${TASK_STATUS_CONFIG[task.status]?.accentClass}`}></div>
+                <div className="p-3">
                     <div className="flex justify-between items-start mb-2">
                         {isEditingTitle ? (
                             <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className="flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500" />
-                        ) : ( // Priority Indicator removed from here
-                            <Tooltip text="Double-click to edit title">
-                                <h3 onDoubleClick={() => setIsEditingTitle(true)} className="font-bold text-slate-100 flex-grow cursor-pointer min-w-0 break-words">{task.title}</h3>
+                        ) : (
+                            <Tooltip text={isLocked ? "Task is completed" : "Double-click to edit title"}>
+                                <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} className={`font-bold text-slate-100 flex-grow min-w-0 break-words ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}>{task.title}</h3>
                             </Tooltip>
                         )}
-                        {/* Priority Indicator removed from here */}
                     </div>
 
                     <ul className="space-y-1 my-2">{checklist.map(item => 
@@ -822,10 +798,11 @@
                             onAddNewItemAfter={handleAddNewItemAfter}
                             isFocused={focusedItemId === item.id}
                             onFocusHandled={() => setFocusedItemId(null)}
+                            isLocked={isLocked}
                         />
                     )}</ul>
                     <Tooltip text="Add a new checklist item">
-                        <button onClick={handleAddItem} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50">+ Add item</button>
+                        <button onClick={handleAddItem} disabled={isLocked} className="w-full text-left text-sm text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:bg-transparent">+ Add item</button>
                     </Tooltip>
 
                     {/* --- Notes Section --- */}
@@ -857,7 +834,7 @@
                                 ) : (
                                     <p className="text-sm text-slate-500 italic">No notes for this task.</p>
                                 )}
-                                <Tooltip text={notes ? 'View or edit notes' : 'Add notes'}><button onClick={() => setIsNotesExpanded(true)} className="text-xs text-sky-400 hover:text-sky-300 flex-shrink-0">{notes ? 'View/Edit' : 'Add Note'}</button></Tooltip>
+                                <Tooltip text={notes ? 'View or edit notes' : 'Add notes'}><button onClick={() => setIsNotesExpanded(true)} disabled={isLocked} className="text-xs text-sky-400 hover:text-sky-300 flex-shrink-0 disabled:text-slate-500 disabled:cursor-not-allowed">{notes ? 'View/Edit' : 'Add Note'}</button></Tooltip>
                             </div>
                         )}
                     </div>
@@ -869,14 +846,14 @@
                                 <Tooltip key={pTag} text={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}>
                                     <button 
                                         onClick={() => handleSetPriorityTag(pTag)}
-                                        className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0`} /* Removed mr-1 mb-1, added flex-shrink-0 */
+                                        disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`} /* Removed mr-1 mb-1, added flex-shrink-0 */
                                     >
                                         {PRIORITY_CONFIG[pTag].title}
                                     </button>
                                 </Tooltip>
                             ))}
                             <Tooltip text="Clear priority (Unprioritized)">
-                                <button onClick={() => handleSetPriorityTag(null)} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
+                                <button onClick={() => handleSetPriorityTag(null)} disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
                                     Clear
                                 </button>
                             </Tooltip>
@@ -888,7 +865,7 @@
                                 <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
                                     {tag}
                                     <Tooltip text={`Remove tag: ${tag}`}>
-                                        <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
+                                        <button onClick={() => handleRemoveTag(tag)} disabled={isLocked} className="ml-2 text-slate-400 hover:text-white leading-none disabled:hidden">&times;</button>
                                     </Tooltip>
                                 </span>
                             ))}
@@ -900,13 +877,13 @@
                                 value={newTag}
                                 onChange={(e) => setNewTag(e.target.value)}
                                 onKeyDown={(e) => {if (e.key === 'Enter') handleAddTag()}}
-                                placeholder="Add a tag..."                                className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0"
+                                placeholder="Add a tag..."                                disabled={isLocked} className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0 disabled:cursor-not-allowed disabled:bg-slate-800"
                             />
                             <datalist id="tag-suggestions">
                                 {allTags.map(tag => <option key={tag} value={tag} />)}
                             </datalist>
                             <Tooltip text="Add this tag to the task">
-                                <button onClick={handleAddTag} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500">Add</button> {/* Adjusted py-1 for consistency */}
+                                <button onClick={handleAddTag} disabled={isLocked} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Add</button> {/* Adjusted py-1 for consistency */}
                             </Tooltip>
                         </div>
                         {tagError && <div className="mt-1.5 text-xs text-red-400">{tagError}</div>}
@@ -943,29 +920,24 @@
                         </div>
                     )}
                     <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between items-center">
+                        {/* Manual Status Selector */}
                         <div className="flex items-center space-x-2">
-                            {!task.archived && task.status === TASK_STATUS.TO_DO && !task.totalElapsedTimeInSeconds && (
-                                <Tooltip text="Start working on this task">
-                                    <button onClick={statusActions[TASK_STATUS.TO_DO]} className="px-3 py-1 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 text-sm">Start Task</button>
-                                </Tooltip>
-                            )}
-                            {(task.status !== TASK_STATUS.TO_DO || task.totalElapsedTimeInSeconds > 0) && <TimeElapsed startTime={task.startedAt} totalElapsedSeconds={task.totalElapsedTimeInSeconds || 0} />}
-                            {!task.archived && task.status === TASK_STATUS.IN_PROGRESS && task.startedAt && (
-                                <Tooltip text="Pause task timer">
-                                    <button onClick={statusActions[TASK_STATUS.IN_PROGRESS]} className="px-2 py-1 bg-amber-600 text-white text-xs rounded-md hover:bg-amber-500">Pause</button>
-                                </Tooltip>
-                            )}
-                            {!task.archived && (task.status === TASK_STATUS.ON_HOLD || (task.status === TASK_STATUS.TO_DO && task.totalElapsedTimeInSeconds > 0)) && (
-                                <Tooltip text="Resume working on this task">
-                                    <button onClick={statusActions[TASK_STATUS.ON_HOLD]} className="px-2 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-500">Resume</button>
-                                </Tooltip>
-                            )}
+                            <label htmlFor={`status-select-${task.id}`} className="text-sm text-slate-400">Status:</label>
+                            <select
+                                id={`status-select-${task.id}`}
+                                value={task.status}
+                                onChange={handleStatusChange}
+                                className={`${TASK_STATUS_CONFIG[task.status]?.selectBgColor || 'bg-slate-900/50'} text-slate-200 text-sm p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 transition-colors`}
+                            >
+                                {Object.values(TASK_STATUS).map(status => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="flex items-center space-x-2">
                             <Tooltip text={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"}>
-                                <button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.archived} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
+                                <button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.status === TASK_STATUS.DONE} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
                             </Tooltip>
-                            <Tooltip text={task.archived ? "Restore" : "Archive"}><button onClick={() => archiveTask(task.id, !task.archived)} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700">{task.archived ? <RestoreIcon /> : <ArchiveIcon />}</button></Tooltip>
                             <Tooltip text="Delete Permanently"><button onClick={handleDeleteRequest} className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button></Tooltip>
                         </div>
                     </div>
@@ -979,37 +951,31 @@
     // --- Main Presentation Component ---
     const App = () => {
         const { 
-            tasks, addTask, archiveTask, 
-            settings, setSettings, 
-            taskToClose, setTaskToClose, 
-            taskToUnarchive, setTaskToUnarchive, 
-            taskToDelete, setTaskToDelete, 
-            allTags, deleteTask, updateTask, clearArchive, // Core data functions
+            tasks, addTask, 
+            settings, setSettings,
+            taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, 
+            allTags, deleteTask, updateTask, // Core data functions
             activeTags, setActiveTags,                     // Filter state
             activeSwimlanes, setActiveSwimlanes,           // Swimlane visibility state
             collapsedTagSwimlanes, toggleSwimlaneCollapse, // Swimlane collapse state & toggle fn
-            collapsedColumns, setCollapsedColumns          // Fixed column collapse state & setter
+            collapsedColumns, setCollapsedColumns,          // Fixed column collapse state & setter
+            showCompleted, setShowCompleted, currentTasks   // View state and derived tasks from provider
         } = useAppContext();
 
 
 
         const now = useNow(); // Get current time, updates every second
 
-        const [showArchived, setShowArchived] = useState(false);
         // const [collapsedColumns, setCollapsedColumns] = useState({ 'new-tasks': false }); // MOVED to AppProvider
         const [showSettings, setShowSettings] = useState(false);
         // const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved to AppProvider
         const [clockTimezone, setClockTimezone] = useState('EST');
         const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
-        
         const [draggedSwimlane, setDraggedSwimlane] = useState(null); // For swimlane reordering
 
         // State for the main "Add Task" input in the header
         const [showMainAddTaskInput, setShowMainAddTaskInput] = useState(false);
-        const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
 
-        const currentTasks = useMemo(() => showArchived ? tasks.filter(t => t.archived) : tasks.filter(t => !t.archived), [tasks, showArchived]);
-        
         const prevTasks = usePrevious(currentTasks);
 
         useEffect(() => {
@@ -1038,16 +1004,6 @@
             return counts;
         }, [currentTasks, allTags]); // PRIORITY_DISPLAY_TITLES_ARRAY is a stable constant
 
-        useEffect(() => {
-            if (!prevTasks || !currentTasks) return;
-            currentTasks.forEach(task => {
-                const prevTask = prevTasks.find(pt => pt.id === task.id);
-                if (prevTask && prevTask.status !== TASK_STATUS.DONE && task.status === TASK_STATUS.DONE && !task.archived) {
-                    setTaskToClose(task);
-                }
-            });
-        }, [currentTasks, prevTasks, setTaskToClose]);
-
         // --- Effect for Reminder Notifications & Sounds ---
         useEffect(() => {
             if (!('Notification' in window) || Notification.permission !== 'granted') {
@@ -1055,7 +1011,7 @@
             }
 
             tasks.forEach(task => {
-                if (task.reminderAt && !task.reminderFired && !task.archived && new Date(task.reminderAt) <= now) {
+                if (task.reminderAt && !task.reminderFired && task.status !== TASK_STATUS.DONE && new Date(task.reminderAt) <= now) {
                     // console.log(`Firing reminder for task: ${task.title}`); // For debugging
                     new Notification('Taiko Task Reminder', {
                         body: `Reminder for: ${task.title}`,
@@ -1088,40 +1044,21 @@
             setTaskToDelete(null);
         }, [taskToDelete, deleteTask]);
 
-        const handleConfirmClearArchive = useCallback(() => { clearArchive(); setShowClearArchiveConfirm(false); }, [clearArchive]);
+        const handleConfirmComplete = useCallback(() => {
+            if (!taskToComplete) return;
+            updateTask(taskToComplete.id, { status: TASK_STATUS.DONE });
+            setTaskToComplete(null);
+        }, [taskToComplete, updateTask]);
 
 
         const handleAddTask = () => { 
             setShowMainAddTaskInput(true); // Show the input form instead of adding directly
         };
-        const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
-        const handleConfirmUnarchive = (id) => { 
-            archiveTask(id, false); 
-            setTaskToUnarchive(null); 
-            // If unarchiving, ensure the relevant swimlanes are active/expanded
-            const unarchivedTask = tasks.find(t => t.id === id);
-            if (unarchivedTask) {
-                const relevantSwimlanes = [];
-                if (unarchivedTask.priority) {
-                    relevantSwimlanes.push(PRIORITY_CONFIG[unarchivedTask.priority].title);
-                }
-                (unarchivedTask.tags || []).forEach(tag => {
-                    if (!PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)) { // Only add custom tags
-                        relevantSwimlanes.push(tag);
-                    }
-                });
-                setActiveSwimlanes(prev => {
-                    const newActive = new Set([...prev, ...relevantSwimlanes]);
-                    return Array.from(newActive);
-                });
-                relevantSwimlanes.forEach(swimlane => toggleSwimlaneCollapse(swimlane, false)); // Ensure they are expanded
-            }
-        };
         const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
         
-        const handleArchiveClick = () => {
-            const newArchiveState = !showArchived;
-            setShowArchived(newArchiveState);
+        const handleCompletedClick = () => {
+            const newCompletedState = !showCompleted;
+            setShowCompleted(newCompletedState);
         };
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
         useEffect(() => {
@@ -1242,8 +1179,8 @@
             const ut = []; // unclassifiedTasks
 
             const taskSorter = (a, b) => {
-                if (showArchived) {
-                    return new Date(b.timestamp) - new Date(a.timestamp); // Newest archived first
+                if (showCompleted) {
+                    return new Date(b.timestamp) - new Date(a.timestamp); // Newest completed first
                 } else {
                     return (a.rank ?? Infinity) - (b.rank ?? Infinity); 
                 }
@@ -1283,18 +1220,17 @@
                 st[swimlaneName].sort(taskSorter);
             }
             return { swimlaneTasks: st, unclassifiedTasks: ut };
-        }, [tasksMatchingActiveFilters, activeSwimlanes, showArchived, PRIORITY_TITLE_TO_CONSTANT_MAP]);
+        }, [tasksMatchingActiveFilters, activeSwimlanes, showCompleted, PRIORITY_TITLE_TO_CONSTANT_MAP]);
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
-        const backgroundOverlayClass = showArchived ? 'bg-red-900/10' : '';
+        const backgroundOverlayClass = showCompleted ? 'bg-green-900/10' : '';
         
         return (
             <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: `radial-gradient(circle, rgba(15, 23, 42, 0.9), rgba(10, 15, 30, 1)), linear-gradient(135deg, #0f172a 0%, #1e293b 100%)` }}>
                 
-                {taskToClose && <CloseoutModal task={taskToClose} onConfirm={handleConfirmCloseout} onCancel={() => setTaskToClose(null)} />}
-                {taskToUnarchive && <UnarchiveModal task={taskToUnarchive} onConfirm={handleConfirmUnarchive} onCancel={() => setTaskToUnarchive(null)} />}
+                {taskToComplete && <CompleteConfirmationModal task={taskToComplete} onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} />}
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
-                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}                {showClearArchiveConfirm && <ClearArchiveConfirmationModal onConfirm={handleConfirmClearArchive} onCancel={() => setShowClearArchiveConfirm(false)} />}
+                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
                 {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={activeSwimlanes} setSwimlanes={setActiveSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
 
                 <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
@@ -1320,14 +1256,9 @@
                                 <BugIcon />
                             </a>
                         </Tooltip>
-                        <Tooltip text={showArchived ? "View Active Tasks" : "View Archived Tasks (A)"}>
-                            <button onClick={handleArchiveClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showArchived ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' : 'bg-slate-700'}`}>{showArchived ? 'View Active' : 'View Archived'}</button>
+                        <Tooltip text={showCompleted ? "View Active Tasks" : "View Completed Tasks"}>
+                            <button onClick={handleCompletedClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showCompleted ? 'bg-green-600 hover:bg-green-500 focus:ring-green-400' : 'bg-slate-700'}`}>{showCompleted ? 'View Active' : 'View Completed'}</button>
                         </Tooltip>
-                        {showArchived && (
-                            <Tooltip text="Permanently delete all archived tasks">
-                                <button onClick={() => setShowClearArchiveConfirm(true)} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all">Clear Archive</button>
-                            </Tooltip>
-                        )}
                         {/* Conditionally render the button or the quick add input */}
                         {showMainAddTaskInput ? (
                              <QuickAddInputForm 
@@ -1381,74 +1312,91 @@
                 </div>
 
                 <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass}`}>
-                    {/* --- "New Tasks" Column (replaces Triage) --- */}
-                    {(() => { // This column displays unclassifiedTasks
-                        const unsortedTasksToDisplay = unclassifiedTasks;
-                        const isEffectivelyCollapsedUnsorted = (settings.autoCollapse && unsortedTasksToDisplay.length === 0) ? true : (collapsedColumns['unsorted'] || false);
-                        
-                        // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
-                        const shouldRenderUnsortedColumn = unsortedTasksToDisplay.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedUnsorted);
+                    {showCompleted ? (
+                        <PriorityColumn
+                            key="completed-column"
+                            titleOverride="Completed Tasks"
+                            priority={null}
+                            tasks={currentTasks}
+                            isCollapsed={false}
+                            onToggleCollapse={() => {}}
+                            showCompleted={showCompleted}
+                            isVerticalLayout={settings.verticalLayout}
+                            clockTimezone={clockTimezone}
+                            isSwimlane={false}
+                            disableQuickAdd={true}
+                        />
+                    ) : (
+                        <>
+                            {/* --- "New Tasks" Column (replaces Triage) --- */}
+                            {(() => { // This column displays unclassifiedTasks
+                                const unsortedTasksToDisplay = unclassifiedTasks;
+                                const isEffectivelyCollapsedUnsorted = (settings.autoCollapse && unsortedTasksToDisplay.length === 0) ? true : (collapsedColumns['unsorted'] || false);
+                                
+                                // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
+                                const shouldRenderUnsortedColumn = unsortedTasksToDisplay.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedUnsorted);
 
-                        if (shouldRenderUnsortedColumn) {
-                            return (
-                                <PriorityColumn
-                                    key="unsorted-column"
-                                    titleOverride="Unsorted" // Updated title
-                                    priority={null} // Base styling on unprioritized, but title is overridden
-                                    tasks={unsortedTasksToDisplay}
-                                    isCollapsed={isEffectivelyCollapsedUnsorted}
-                                    onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'unsorted': !p['unsorted'] }))}
-                                    showArchived={showArchived}
-                                    isVerticalLayout={settings.verticalLayout}
-                                    clockTimezone={clockTimezone}
-                                    isSwimlane={false} // Indicate this is a primary column
-                                /> );
-                        } return null;
-                    })()}
-                    {activeSwimlanes.map(item => { // Iterate over all active swimlanes (tags or priority display titles)
-                        const tasksForThisSwimlane = swimlaneTasks[item] || [];
-                        const isManuallyCollapsed = collapsedTagSwimlanes[item] || false;
-                        const isEffectivelyCollapsedTag = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
+                                if (shouldRenderUnsortedColumn) {
+                                    return (
+                                        <PriorityColumn
+                                            key="unsorted-column"
+                                            titleOverride="Unsorted" // Updated title
+                                            priority={null} // Base styling on unprioritized, but title is overridden
+                                            tasks={unsortedTasksToDisplay}
+                                            isCollapsed={isEffectivelyCollapsedUnsorted}
+                                            onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'unsorted': !p['unsorted'] }))}
+                                            showCompleted={showCompleted}
+                                            isVerticalLayout={settings.verticalLayout}
+                                            clockTimezone={clockTimezone}
+                                            isSwimlane={false} // Indicate this is a primary column
+                                        /> );
+                                } return null;
+                            })()}
+                            {activeSwimlanes.map(item => { // Iterate over all active swimlanes (tags or priority display titles)
+                                const tasksForThisSwimlane = swimlaneTasks[item] || [];
+                                const isManuallyCollapsed = collapsedTagSwimlanes[item] || false;
+                                const isEffectivelyCollapsedTag = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
 
-                        // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
-                        const shouldRenderTagColumn = tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedTag);
+                                // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
+                                const shouldRenderTagColumn = tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedTag);
 
-                        if (!shouldRenderTagColumn) {
-                            return null; // Hide the column if filters make it empty, or if no filters and it's effectively collapsed
-                        }
+                                if (!shouldRenderTagColumn) {
+                                    return null; // Hide the column if filters make it empty, or if no filters and it's effectively collapsed
+                                }
 
-                        // All active swimlanes (including those named "High", "Medium", "Low")
-                        // will now be rendered by TagColumn.
-                        // The "Unsorted" column is handled separately above.
-                        return (
-                            <div
-                                key={item}
-                                draggable={!settings.verticalLayout} // Only allow drag in horizontal mode for now
-                                onDragStart={(e) => !settings.verticalLayout && handleDragStartSwimlane(e, item)}
-                                onDragOver={!settings.verticalLayout ? handleDragOverSwimlane : undefined}
-                                onDrop={() => !settings.verticalLayout && handleDropSwimlane(item)}
-                                className={`transition-opacity duration-200 ${draggedSwimlane === item ? 'opacity-30' : 'opacity-100'} ${settings.verticalLayout ? 'w-full' : 'flex-1 min-w-0'}`}
-                            >
-                                <TagColumn 
-                                    tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
-                                    tasks={tasksForThisSwimlane} 
-                                    clockTimezone={clockTimezone}
-                                    isCollapsed={isEffectivelyCollapsedTag}
-                                    onToggleCollapse={() => toggleSwimlaneCollapse(item)}
-                                    isVerticalLayout={settings.verticalLayout}
-                                    isBeingDragged={draggedSwimlane === item}
-                                />
-                            </div>
-                        );
-                    })}                    
-                    {/* Default Priority Columns are removed. They are now handled as selectable swimlanes if their tags exist. */}
+                                // All active swimlanes (including those named "High", "Medium", "Low")
+                                // will now be rendered by TagColumn.
+                                // The "Unsorted" column is handled separately above.
+                                return (
+                                    <div
+                                        key={item}
+                                        draggable={!settings.verticalLayout} // Only allow drag in horizontal mode for now
+                                        onDragStart={(e) => !settings.verticalLayout && handleDragStartSwimlane(e, item)}
+                                        onDragOver={!settings.verticalLayout ? handleDragOverSwimlane : undefined}
+                                        onDrop={() => !settings.verticalLayout && handleDropSwimlane(item)}
+                                        className={`transition-opacity duration-200 ${draggedSwimlane === item ? 'opacity-30' : 'opacity-100'} ${settings.verticalLayout ? 'w-full' : 'flex-1 min-w-0'}`}
+                                    >
+                                        <TagColumn 
+                                            tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
+                                            tasks={tasksForThisSwimlane} 
+                                            clockTimezone={clockTimezone}
+                                            isCollapsed={isEffectivelyCollapsedTag}
+                                            onToggleCollapse={() => toggleSwimlaneCollapse(item)}
+                                            isVerticalLayout={settings.verticalLayout}
+                                            isBeingDragged={draggedSwimlane === item}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </>
+                    )}
                 </main>
             </div>
         );
     };
 
     // --- Column & Modal Components ---
-    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showArchived, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null }) => {
+    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showCompleted, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null, disableQuickAdd = false }) => {
         const { addTask } = useAppContext();
         const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
@@ -1500,7 +1448,7 @@
                             className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70 hover:bg-slate-700/70' : (titleOverride ? 'bg-slate-700/60 hover:bg-slate-600/60' : 'hover:bg-slate-700/50')} flex-shrink-0 transition-colors`}
                         >
                             <div className="flex-grow min-w-0">{headerContent}</div>
-                            {!isCollapsed && !showQuickAdd && (
+                            {!isCollapsed && !showQuickAdd && !disableQuickAdd && (
                                 <Tooltip text={`Quick add to ${displayTitleText}`}>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); setShowQuickAdd(true); }} 
@@ -1515,7 +1463,7 @@
                 ) : ( // Static header for horizontal layout
                     <div className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70' : (titleOverride ? 'bg-slate-700/60' : 'bg-slate-900/60')} flex-shrink-0`}>
                         <div className="flex-grow min-w-0">{headerContent}</div>
-                        {!showQuickAdd && (
+                        {!showQuickAdd && !disableQuickAdd && (
                              <Tooltip text={`Quick add to ${displayTitleText}`}>
                                 <button 
                                     onClick={() => setShowQuickAdd(true)} 
@@ -1538,7 +1486,7 @@
                     }
                 `}>
                     {tasks.map((task) => (
-                        <div key={task.id} className={`w-full min-w-0 transition-opacity duration-300 ${(!showArchived && task.status === TASK_STATUS.DONE) ? 'opacity-20' : 'opacity-100'}`}>
+                        <div key={task.id} className="w-full min-w-0">
                             <MemoizedTaskCard task={task} clockTimezone={clockTimezone} />
                         </div>
                     ))}
@@ -1696,10 +1644,8 @@
             <div className="px-3 py-4">{children}</div> {/* Adjusted padding: px-3 py-4. Removed overflow-y-auto and flex-grow */}
         </div>
     );
-    const CloseoutModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Task Complete!</h3><p className="text-slate-300 mb-4">Would you like to archive the task "{task.title}"?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Keep Active</button><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Archive Task</button></div></div></Modal>;
-    const UnarchiveModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Unarchive Task?</h3><p className="text-slate-300 mb-4">You've made a change to an archived task. Would you like to move "{task.title}" back to the active board?</p><div className="flex justify-center space-x-4"><Tooltip text="Keep the task archived"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">No, Keep Archived</button></Tooltip><Tooltip text="Move task to active board"><button onClick={() => onConfirm(task.id)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Yes, Unarchive</button></Tooltip></div></div></Modal>;
+    const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><Tooltip text="Keep task active"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm completion"><button onClick={onConfirm} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></Tooltip></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
-    const ClearArchiveConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-md text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-red-400 mb-2">Clear Entire Archive?</h3><p className="text-slate-300 mb-1">Are you sure you want to permanently delete <strong className="text-red-300">ALL</strong> archived tasks?</p><p className="text-slate-400 text-sm mb-4">This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel operation"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm deletion of all archived tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600">Yes, Delete All Archived</button></Tooltip></div></div></Modal>;
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         return ( 
