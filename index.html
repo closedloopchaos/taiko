@@ -561,6 +561,7 @@
         const [isNotesExpanded, setIsNotesExpanded] = useState(false);
         // State to manage which checklist item should be focused
         const [focusedItemId, setFocusedItemId] = useState(null);
+        const notesTextareaRef = useRef(null); // Ref for the notes textarea
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
         useEffect(() => { setTitle(task.title); }, [task.title]);
@@ -575,6 +576,15 @@
         }, [tagError]);
         useEffect(() => { setNotes(task.notes || ''); }, [task.notes]); // Sync notes state with prop
         
+        // Effect to auto-resize the notes textarea
+        useEffect(() => {
+            if (isNotesExpanded && notesTextareaRef.current) {
+                const textarea = notesTextareaRef.current;
+                textarea.style.height = 'auto'; // Reset height to allow shrinking
+                textarea.style.height = `${textarea.scrollHeight}px`; // Set to content height
+            }
+        }, [notes, isNotesExpanded]); // Rerun on content change or when expanded
+
         const handleDeleteRequest = useCallback(() => {
             if (settings.confirmOnDelete) {
                 setTaskToDelete(task.id); // Corrected: Should set the task ID
@@ -813,13 +823,14 @@
                                     </Tooltip>
                                 </div>
                                 <textarea
+                                    ref={notesTextareaRef}
                                     id={`notes-${task.id}`}
                                     value={notes}
                                     onChange={e => setNotes(e.target.value)}
                                     onBlur={() => updateTask(task.id, { notes })}
                                     onKeyDown={handleNotesKeyDown}
                                     placeholder="Add detailed notes here..."
-                                    className="w-full bg-slate-900/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 resize-y min-h-[60px]"
+                                    className="w-full bg-slate-900/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 resize-none min-h-[60px] overflow-hidden"
                                     autoFocus
                                 ></textarea>
                             </>
@@ -1309,6 +1320,9 @@
                                 </Tooltip>
                             );
                         })}
+                        {allTags.length > 0 && (
+                            <div className="border-l border-slate-700 h-5"></div>
+                        )}
                         {/* Render Other Tag Filters (excluding priority display titles) */}
                         {allTags.map(tag => ( // allTags is now already filtered to be custom tags only
                             <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
