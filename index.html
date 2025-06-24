@@ -461,7 +461,7 @@
 
         return (
             // This container will center its direct children: time, date, and button
-            <div className="flex flex-col overflow-x-hidden items-end text-slate-300">
+            <div className="flex flex-col items-end text-slate-300">
                 {/* Time, now clickable and with a hover tooltip for the timezone */}
                 <div 
                     onClick={onTimezoneChange} 
@@ -1343,7 +1343,7 @@
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
                 
-                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3 overflow-x-hidden">
+                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3">
                     {/* --- Top Row: Title & Clock --- */}
                     <div className="flex justify-between items-center w-full">
                         <div className="flex items-center space-x-4">
@@ -1556,7 +1556,7 @@
 
 
         return (
-            <div className={`flex flex-col overflow-x-hidden rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
+            <div className={`flex flex-col rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button 
