@@ -545,7 +545,7 @@
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone }) => { // Added clockTimezone prop
-        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete, setActiveTags, setActiveSwimlanes, expandSwimlane } = useAppContext();
+        const { updateTask, archiveTask, deleteTask, allTags, settings, setTaskToDelete, setActiveTags, setActiveSwimlanes, expandSwimlane, activeTags } = useAppContext();
         const now = useNow();
 
         const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
@@ -738,28 +738,44 @@
             }
         };
         
-        const handleSetPriorityTag = (priorityConstantToSet) => { // e.g., PRIORITIES.HIGH or null
-            let currentTaskTags = task.tags || [];
-            
-            let newPriorityConstant = task.priority; // Start with current priority
+        const handleSetPriorityTag = (priorityConstantToSet) => {
+            const oldPriorityDisplayTitle = task.priority ? PRIORITY_CONFIG[task.priority].title : null;
+        
+            let newPriorityConstant = task.priority;
             let newPriorityDisplayTitle = null;
-
+        
             if (priorityConstantToSet && task.priority !== priorityConstantToSet) {
                 newPriorityConstant = priorityConstantToSet;
                 newPriorityDisplayTitle = PRIORITY_CONFIG[priorityConstantToSet].title;
             } else if (priorityConstantToSet && task.priority === priorityConstantToSet) {
-                // Clicking the same priority again clears it
                 newPriorityConstant = null;
-            } else if (!priorityConstantToSet) { // Explicitly clearing (e.g. "Clear" button)
-                 newPriorityConstant = null;
+            } else if (!priorityConstantToSet) {
+                newPriorityConstant = null;
             }
-
+        
+            // This logic ensures that if you change a task's priority while filtering by that
+            // same priority, the filter updates to follow the task, preventing it from disappearing.
+            // We update the filters *before* the task data to prevent a re-render with inconsistent state.
+            setActiveTags(prevTags => {
+                if (oldPriorityDisplayTitle && prevTags.includes(oldPriorityDisplayTitle)) {
+                    // Remove all existing priority filters to ensure a clean state.
+                    const nonPriorityFilters = prevTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
+                    // Add the new priority filter if one was set.
+                    return newPriorityDisplayTitle ? [...nonPriorityFilters, newPriorityDisplayTitle] : nonPriorityFilters;
+                }
+                // If the old priority wasn't an active filter, don't change the filters.
+                return prevTags;
+            });
+        
+            // Now, update the task's data. React will batch this with the filter update.
             updateTask(task.id, { priority: newPriorityConstant });
-
-            if (newPriorityDisplayTitle && !activeSwimlanes.includes(newPriorityDisplayTitle)) {
-                 setActiveSwimlanes(prevActiveSwimlanes => {
-                    return [...prevActiveSwimlanes, newPriorityDisplayTitle];
-                });
+        
+            // Finally, manage swimlane visibility as a UI enhancement.
+            if (newPriorityDisplayTitle) {
+                if (!activeSwimlanes.includes(newPriorityDisplayTitle)) {
+                    setActiveSwimlanes(prev => [...prev, newPriorityDisplayTitle]);
+                }
+                expandSwimlane(newPriorityDisplayTitle);
             }
         };
         
@@ -1032,7 +1048,7 @@
             });
         }, [currentTasks, prevTasks, setTaskToClose]);
 
-        // --- Effect for Reminder Notifications ---
+        // --- Effect for Reminder Notifications & Sounds ---
         useEffect(() => {
             if (!('Notification' in window) || Notification.permission !== 'granted') {
                 return; // Notifications not supported or permission not granted
@@ -1079,27 +1095,35 @@
             setShowMainAddTaskInput(true); // Show the input form instead of adding directly
         };
         const handleConfirmCloseout = (id) => { archiveTask(id, true); setTaskToClose(null); };
-        const handleConfirmUnarchive = (id) => { archiveTask(id, false); setTaskToUnarchive(null); };
+        const handleConfirmUnarchive = (id) => { 
+            archiveTask(id, false); 
+            setTaskToUnarchive(null); 
+            // If unarchiving, ensure the relevant swimlanes are active/expanded
+            const unarchivedTask = tasks.find(t => t.id === id);
+            if (unarchivedTask) {
+                const relevantSwimlanes = [];
+                if (unarchivedTask.priority) {
+                    relevantSwimlanes.push(PRIORITY_CONFIG[unarchivedTask.priority].title);
+                }
+                (unarchivedTask.tags || []).forEach(tag => {
+                    if (!PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)) { // Only add custom tags
+                        relevantSwimlanes.push(tag);
+                    }
+                });
+                setActiveSwimlanes(prev => {
+                    const newActive = new Set([...prev, ...relevantSwimlanes]);
+                    return Array.from(newActive);
+                });
+                relevantSwimlanes.forEach(swimlane => toggleSwimlaneCollapse(swimlane, false)); // Ensure they are expanded
+            }
+        };
         const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
         
         const handleArchiveClick = () => {
             const newArchiveState = !showArchived;
             setShowArchived(newArchiveState);
         };
-
-        // Effect to remove swimlanes if their tags are no longer in allTags (e.g., all tasks with that tag were archived)
-        // Or if a priority swimlane's corresponding priority tag is removed from allTags
-        useEffect(() => {
-            setActiveSwimlanes(currentActiveSwimlanes =>
-                currentActiveSwimlanes.filter(swimlaneName => {
-                    const isPrioritySwimlane = PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
-                    // Keep if it's a priority swimlane OR if it's a custom tag present in allTags
-                    return isPrioritySwimlane || allTags.includes(swimlaneName);
-                })
-            );
-        }, [allTags, setActiveSwimlanes, PRIORITY_TITLE_TO_CONSTANT_MAP]); // PRIORITY_TITLE_TO_CONSTANT_MAP is stable
-        
-        // Effect to automatically hide empty swimlanes if autoCollapse is enabled
+        // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
         useEffect(() => {
             if (settings.autoCollapse) {
                 // Use the functional update form of setActiveSwimlanes
@@ -1152,17 +1176,17 @@
 
         const clearTagFilter = () => setActiveTags([]);
 
-        // --- Swimlane Drag and Drop Handlers ---
-        const handleDragStartSwimlane = (e, swimlaneName) => {
-            setDraggedSwimlane(swimlaneName);
-            e.dataTransfer.effectAllowed = 'move';
-            // Optional: Add a class to the body or a specific element for global drag styling
-        };
-
-        const handleDragOverSwimlane = (e) => {
-            e.preventDefault(); // Necessary to allow dropping
-        };
-
+        // `tasksMatchingActiveFilters` is the set of tasks that pass the currently active filters.
+        // This is the base for calculating the counts shown on the filter buttons.
+        const tasksMatchingActiveFilters = useMemo(() => {
+            if (activeTags.length === 0) return currentTasks;
+            return currentTasks.filter(task =>
+                activeTags.every(activeTag => {
+                    const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag];
+                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag));
+                })
+            );
+        }, [currentTasks, activeTags]);
         const handleDropSwimlane = (targetSwimlaneName) => {
             if (!draggedSwimlane || draggedSwimlane === targetSwimlaneName) {
                 setDraggedSwimlane(null);
@@ -1177,37 +1201,55 @@
             setActiveSwimlanes(newActiveSwimlanes);
             setDraggedSwimlane(null);
         };
+        // --- Swimlane Drag and Drop Handlers ---
+        const handleDragStartSwimlane = (e, swimlaneName) => {
+            setDraggedSwimlane(swimlaneName);
+            e.dataTransfer.effectAllowed = 'move';
+            // Optional: Add a class to the body or a specific element for global drag styling
+        };
 
-        const filteredTasksByTagsAndPriority = useMemo(() => {
-            if (activeTags.length === 0) return currentTasks;
-            return currentTasks.filter(task =>
-                activeTags.every(activeTag => {
-                    const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag];
-                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag));
-                }) // Closes 'every'
-            ); // Closes 'filter'
-        }, [currentTasks, activeTags]); // Added closing brace for useMemo callback and dependency array
+        const handleDragOverSwimlane = (e) => {
+            e.preventDefault(); // Necessary to allow dropping
+        };
+
+        // This count is for the "All" button, reflecting the total number of tasks currently visible after all filters.
+        const allTasksCountForFilterDisplay = useMemo(() => tasksMatchingActiveFilters.length, [tasksMatchingActiveFilters]);
+
+        // These counts are for the priority filter buttons.
+        // They should reflect how many tasks *within the currently filtered set* belong to each priority.
+        const priorityFilterCountsForDisplay = useMemo(() => {
+            const counts = {};
+            DISPLAY_PRIORITY_ORDER.forEach(priorityConstant => {
+                const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
+                counts[displayTitle] = tasksMatchingActiveFilters.filter(task => task.priority === priorityConstant).length;
+            });
+            return counts;
+        }, [tasksMatchingActiveFilters]);
+
+        // These counts are for the custom tag filter buttons.
+        // They should reflect how many tasks *within the currently filtered set* have each custom tag.
+        const customTagFilterCountsForDisplay = useMemo(() => {
+            const counts = {};
+            const customTagsToDisplay = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag));
+            customTagsToDisplay.forEach(tag => {
+                counts[tag] = tasksMatchingActiveFilters.filter(task => task.tags && task.tags.includes(tag)).length;
+            });
+            return counts;
+        }, [tasksMatchingActiveFilters, allTags]);
 
         const { swimlaneTasks, unclassifiedTasks } = useMemo(() => { // Renamed priorityTasks to unclassifiedTasks
             const st = {};
             const ut = []; // unclassifiedTasks
 
             const taskSorter = (a, b) => {
-                const priorityA = getPrioritySortValue(a.priority);
-                const priorityB = getPrioritySortValue(b.priority);
-                if (priorityA !== priorityB) {
-                    return priorityA - priorityB;
-                }
-                // Secondary sort: rank for active, timestamp for archived
                 if (showArchived) {
                     return new Date(b.timestamp) - new Date(a.timestamp); // Newest archived first
                 } else {
-                    // Lower rank first. Tasks with null/undefined rank go to the bottom of their priority group.
                     return (a.rank ?? Infinity) - (b.rank ?? Infinity); 
                 }
             };
 
-            for (const task of filteredTasksByTagsAndPriority) {
+            for (const task of tasksMatchingActiveFilters) {
                 let inSwimlane = false;
                 
                 for (const swimlaneName of activeSwimlanes) { 
@@ -1240,8 +1282,8 @@
             for (const swimlaneName in st) {
                 st[swimlaneName].sort(taskSorter);
             }
-            return { swimlaneTasks: st, unclassifiedTasks: ut }; 
-        }, [filteredTasksByTagsAndPriority, activeSwimlanes, showArchived, PRIORITY_TITLE_TO_CONSTANT_MAP]); // Added showArchived and PRIORITY_TITLE_TO_CONSTANT_MAP
+            return { swimlaneTasks: st, unclassifiedTasks: ut };
+        }, [tasksMatchingActiveFilters, activeSwimlanes, showArchived, PRIORITY_TITLE_TO_CONSTANT_MAP]);
 
         const mainLayoutClasses = settings.verticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4';
         const backgroundOverlayClass = showArchived ? 'bg-red-900/10' : '';
@@ -1303,8 +1345,8 @@
                         <Tooltip text="Show all tasks (clear tag filters)">
                             <button onClick={clearTagFilter} // This button clears all activeTags, including priority titles
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                    All
-                                    <span className="opacity-80"> ({allTasksCount})</span>                            </button>
+                                    All <span className="opacity-80"> ({allTasksCountForFilterDisplay})</span>
+                            </button>
                         </Tooltip>
                         {/* Render Priority Filter Buttons First in Specific Order */}
                         {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
@@ -1315,7 +1357,7 @@
                                         onClick={() => handleTagFilterClick(displayTitle)}
                                         className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}
                                     >
-                                        {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
+                                        {displayTitle} <span className="opacity-80">({priorityFilterCountsForDisplay[displayTitle] || 0})</span>
                                     </button>
                                 </Tooltip>
                             );
@@ -1328,8 +1370,8 @@
                             <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
                                 <button onClick={() => handleTagFilterClick(tag)}
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                    {tag}
-                                    <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>                                </button>
+                                    {tag} <span className="opacity-80"> ({customTagFilterCountsForDisplay[tag] || 0})</span>
+                                </button>
                             </Tooltip>
                         ))}
                     </div>
