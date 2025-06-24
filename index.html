@@ -461,7 +461,7 @@
 
         return (
             // This container will center its direct children: time, date, and button
-            <div className="flex flex-col items-center text-slate-300">
+            <div className="flex flex-col items-end text-slate-300">
                 {/* Time, now clickable and with a hover tooltip for the timezone */}
                 <div 
                     onClick={onTimezoneChange} 
@@ -1342,54 +1342,47 @@
                 {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
-
-                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex justify-between items-center flex-shrink-0 flex-wrap">
-                    <div className="flex items-center space-x-4">
-                        <TaikoLogo />
-                        <div>
-                            <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1> {/* Removed paddingLeft for alignment */}
-                            <p className="text-slate-400 text-sm">Operations Task Master</p>
+                
+                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3">
+                    {/* --- Top Row: Title & Clock --- */}
+                    <div className="flex justify-between items-center w-full">
+                        <div className="flex items-center space-x-4">
+                            <TaikoLogo />
+                            <div>
+                                <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
+                                <p className="text-slate-400 text-sm">Operations Task Master</p>
+                            </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                            <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
                         </div>
                     </div>
-                    <div className="flex-grow flex items-center justify-center min-w-[300px] my-2 md:my-0"><LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} /></div>
-                    <div className="flex items-center space-x-4">
-                        <Tooltip text="Settings">
-                            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
-                        </Tooltip>
-                        <Tooltip text="Report Issue or Submit Feedback">
-                            <a 
-                                href="https://github.com/closedloopchaos/taiko/issues/new/choose" 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"
-                            >
-                                <BugIcon />
-                            </a>
-                        </Tooltip>
-                        <Tooltip text="Generate Summary of Completed Tasks">
-                            <button onClick={generateCompletedTasksSummary} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors">
-                                <DocumentTextIcon />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Delete All Completed Tasks">
-                            {showCompleted && completedTasksCount > 0 && (
-                                <button onClick={() => setShowDeleteAllCompletedModal(true)} className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors">
-                                    <DeleteIcon />
-                                </button>
+
+                    {/* --- Bottom Row: Toolbar --- */}
+                    <div className="flex items-center w-full flex-wrap gap-2">
+                        <div className="flex items-center flex-wrap gap-2">
+                            <Tooltip text="Settings"><button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button></Tooltip>
+                            <Tooltip text="Report Issue or Submit Feedback"><a href="https://github.com/closedloopchaos/taiko/issues/new/choose" target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><BugIcon /></a></Tooltip>
+                            <Tooltip text="Generate Summary of Completed Tasks"><button onClick={generateCompletedTasksSummary} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><DocumentTextIcon /></button></Tooltip>
+                            <Tooltip text="Delete All Completed Tasks">
+                                {showCompleted && completedTasksCount > 0 && (
+                                    <button onClick={() => setShowDeleteAllCompletedModal(true)} className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors"><DeleteIcon /></button>
+                                )}
+                            </Tooltip>
+                        </div>
+                        
+                        <div className="flex-grow"></div>
+
+                        <div className="flex items-center flex-wrap gap-2">
+                            <Tooltip text={showCompleted ? "View Active Tasks" : "View Completed Tasks"}>
+                                <button onClick={handleCompletedClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showCompleted ? 'bg-green-600 hover:bg-green-500 focus:ring-green-400' : 'bg-slate-700'}`}>{showCompleted ? 'View Active' : 'View Completed'}</button>
+                            </Tooltip>
+                            {showMainAddTaskInput ? (
+                                <QuickAddInputForm onAdd={(title) => { addTask(title); setShowMainAddTaskInput(false); }} onCancel={() => setShowMainAddTaskInput(false)} />
+                            ) : (
+                                <AddTaskButton onAddTask={handleAddTask} />
                             )}
-                        </Tooltip>
-                        <Tooltip text={showCompleted ? "View Active Tasks" : "View Completed Tasks"}>
-                            <button onClick={handleCompletedClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showCompleted ? 'bg-green-600 hover:bg-green-500 focus:ring-green-400' : 'bg-slate-700'}`}>{showCompleted ? 'View Active' : 'View Completed'}</button>
-                        </Tooltip>
-                        {/* Conditionally render the button or the quick add input */}
-                        {showMainAddTaskInput ? (
-                             <QuickAddInputForm 
-                                onAdd={(title) => { addTask(title); setShowMainAddTaskInput(false); }} 
-                                onCancel={() => setShowMainAddTaskInput(false)}
-                            />
-                        ) : (
-                            <AddTaskButton onAddTask={handleAddTask} />
-                        )}
+                        </div>
                     </div>
                 </header>
                 
@@ -1399,7 +1392,7 @@
                             <button onClick={clearTagFilter} // This button clears all activeTags, including priority titles
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     All <span className="opacity-80"> ({allTasksCountForFilterDisplay})</span>
-                            </button>
+                                </button>
                         </Tooltip>
                         {/* Render Priority Filter Buttons First in Specific Order */}
                         {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
