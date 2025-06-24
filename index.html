@@ -985,7 +985,19 @@
             showCompleted, setShowCompleted, currentTasks   // View state and derived tasks from provider
         } = useAppContext();
 
-
+        const tagsForCurrentView = useMemo(() => {
+            const customTagsSet = new Set();
+            currentTasks.forEach(task => {
+                (task.tags || []).forEach(tag => {
+                    // This check prevents priority display titles from appearing as tag filters.
+                    const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
+                        pTitle => pTitle.toLowerCase() === tag.toLowerCase()
+                    );
+                    if (!isPriorityTitle) { customTagsSet.add(tag); }
+                });
+            });
+            return Array.from(customTagsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }, [currentTasks]);
 
         const now = useNow(); // Get current time, updates every second
 
@@ -1110,6 +1122,7 @@
         const handleCompletedClick = () => {
             const newCompletedState = !showCompleted;
             setShowCompleted(newCompletedState);
+            setActiveTags([]);
         };
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
 
@@ -1408,11 +1421,11 @@
                                 </Tooltip>
                             );
                         })}
-                        {allTags.length > 0 && (
+                        {tagsForCurrentView.length > 0 && (
                             <div className="border-l border-slate-700 h-5"></div>
                         )}
                         {/* Render Other Tag Filters (excluding priority display titles) */}
-                        {allTags.map(tag => ( // allTags is now already filtered to be custom tags only
+                        {tagsForCurrentView.map(tag => ( // Use tagsForCurrentView to only show relevant tags
                             <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
                                 <button onClick={() => handleTagFilterClick(tag)}
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
