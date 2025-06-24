@@ -461,7 +461,7 @@
 
         return (
             // This container will center its direct children: time, date, and button
-            <div className="flex flex-col items-end text-slate-300">
+            <div className="flex flex-col overflow-x-hidden items-end text-slate-300">
                 {/* Time, now clickable and with a hover tooltip for the timezone */}
                 <div 
                     onClick={onTimezoneChange} 
@@ -1343,7 +1343,7 @@
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
                 
-                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3">
+                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3 overflow-x-hidden">
                     {/* --- Top Row: Title & Clock --- */}
                     <div className="flex justify-between items-center w-full">
                         <div className="flex items-center space-x-4">
@@ -1556,7 +1556,7 @@
 
 
         return (
-            <div className={`flex flex-col rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
+            <div className={`flex flex-col overflow-x-hidden rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button 
@@ -1639,7 +1639,7 @@
         };
 
         return (
-            <div className={`flex flex-col bg-indigo-900/20 backdrop-blur-sm border rounded-lg ${columnLayoutClasses} ${dragStyle} transition-all`}>
+            <div className={`flex flex-col overflow-x-hidden bg-indigo-900/20 backdrop-blur-sm border rounded-lg ${columnLayoutClasses} ${dragStyle} transition-all`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
                     <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
                         <button
@@ -1889,7 +1889,7 @@
 
         return (
             <Modal onClose={onClose}>
-                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl text-white flex flex-col overflow-x-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
                         <h3 className="text-xl font-bold">Completed Tasks Summary</h3>
                         <div className="flex items-center space-x-2">
