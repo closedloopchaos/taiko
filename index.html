@@ -526,7 +526,7 @@
         return <span className="text-xs font-mono bg-slate-700/50 text-amber-300 px-2 py-1 rounded">{elapsed}</span>;
     });
 
-    // --- Reminder Countdown Component ---
+    // --- Reminder Countdown Component (Memoized) ---
     const ReminderCountdown = React.memo(({ reminderAt }) => {
         const [countdown, setCountdown] = useState('');
         const now = useNow(); // Use the existing useNow hook
@@ -553,7 +553,7 @@
     // --- UI Components ---
     const ChecklistItem = React.memo(({ 
         item, 
-        onUpdate, 
+        onUpdate, // Now also receives completedAt
         onDelete, 
         onAddNewItemAfter, 
         isFocused, 
@@ -561,7 +561,8 @@
         isLocked, 
         onDragStartItem, 
         onDropItem, 
-        onDragEndItem 
+        onDragEndItem,
+        clockTimezone // Added for displaying subtask completion time
     }) => {
         const inputRef = useRef(null);
         const [isDragOver, setIsDragOver] = useState(false); // Local state for drag over visual feedback
@@ -630,7 +631,13 @@
                 onDragEnd={handleDragEnd}
                 className={`flex items-center space-x-2 group p-1 rounded-md transition-all ${isDragOver ? 'bg-sky-700/30 border border-sky-500' : ''} ${isLocked ? 'cursor-default' : 'cursor-grab'}`}
             >
-                <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} disabled={isLocked} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" />
+                <input 
+                    type="checkbox" 
+                    checked={item.completed} 
+                    onChange={e => {
+                        const isCompleted = e.target.checked;
+                        onUpdate(item.id, { completed: isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
+                    }} disabled={isLocked} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" />
                 <input 
                     ref={inputRef}
                     type="text" 
@@ -640,6 +647,16 @@
                     readOnly={isLocked}
                     className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700 read-only:cursor-default`} 
                 />
+                {item.completed && item.completedAt && (
+                    <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
+                        ({new Date(item.completedAt).toLocaleString('en-US', {
+                            timeZone: TIMEZONE_MAP[clockTimezone] || 'UTC',
+                            month: 'numeric', day: 'numeric', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        })})
+                    </span>
+                )}
+
                 <Tooltip text="Delete item">
                     <button onClick={() => onDelete(item.id)} disabled={isLocked} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -927,6 +944,7 @@
                             isFocused={focusedItemId === item.id}
                             onFocusHandled={() => setFocusedItemId(null)}
                             isLocked={isLocked}
+                            clockTimezone={clockTimezone} // Pass clockTimezone to ChecklistItem
                             onDragStartItem={handleDragStartChecklistItem}
                             onDropItem={handleDropChecklistItem}
                             onDragEndItem={handleDragEndChecklistItem}
@@ -1064,6 +1082,18 @@
                                     <option key={status} value={status}>{status}</option>
                                 ))}
                             </select>
+                            {task.status === TASK_STATUS.DONE && task.timestamp && (
+                                <span className="text-xs text-green-400 whitespace-nowrap">
+                                    ({new Date(task.timestamp).toLocaleString('en-US', {
+                                        timeZone: TIMEZONE_MAP[clockTimezone] || 'UTC',
+                                        month: 'numeric',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })})
+                                </span>
+                            )}
                         </div>
                         <div className="flex items-center space-x-2">
                             <Tooltip text={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"}>
@@ -1273,10 +1303,18 @@
 
                     const validSubtasks = (task.checklist || []).filter(item => item.text && item.text.trim() !== '');
 
-                    if (validSubtasks.length > 0) {
+                    // Only include subtasks that were actually completed if we're showing completed tasks
+                    // Or all subtasks if we're showing active tasks
+                    const subtasksToSummarize = showCompleted ? validSubtasks.filter(item => item.completed) : validSubtasks;
+
+                    if (subtasksToSummarize.length > 0) {
                         summary += `\n  Subtasks:\n`;
-                        validSubtasks.forEach(item => {
-                            summary += `    [${item.completed ? 'x' : ' '}] ${item.text}\n`;
+                        subtasksToSummarize.forEach(item => {
+                            let subtaskLine = `    [${item.completed ? 'x' : ' '}] ${item.text}`;
+                            if (item.completed && item.completedAt) {
+                                subtaskLine += ` (Completed: ${new Date(item.completedAt).toLocaleString('en-US', localeOptions)})`;
+                            }
+                            summary += `${subtaskLine}\n`;
                         });
                     } else {
                         summary += `\n  Subtasks:\n    No subtasks.\n`;
