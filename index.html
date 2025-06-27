@@ -530,7 +530,7 @@
     const ReminderCountdown = React.memo(({ reminderAt }) => {
         const [countdown, setCountdown] = useState('');
         const now = useNow(); // Use the existing useNow hook
-
+    
         const formatCountdown = useCallback((ms) => {
             if (ms <= 0) return 'Due!'; // Or '00:00:00' if you prefer
             const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -551,8 +551,41 @@
     });
 
     // --- UI Components ---
-    const ChecklistItem = React.memo(({ item, onUpdate, onDelete, onAddNewItemAfter, isFocused, onFocusHandled, isLocked }) => {
+    const ChecklistItem = React.memo(({ 
+        item, 
+        onUpdate, 
+        onDelete, 
+        onAddNewItemAfter, 
+        isFocused, 
+        onFocusHandled, 
+        isLocked, 
+        onDragStartItem, 
+        onDropItem, 
+        onDragEndItem 
+    }) => {
         const inputRef = useRef(null);
+        const [isDragOver, setIsDragOver] = useState(false); // Local state for drag over visual feedback
+
+        const handleDragStart = (e) => {
+            e.stopPropagation(); // Prevent parent elements from also being dragged
+            e.dataTransfer.setData('text/plain', item.id); // Set the ID of the dragged item
+            e.dataTransfer.effectAllowed = 'move';
+            onDragStartItem(item.id); // Notify parent TaskCard
+        };
+
+        const handleDragOver = (e) => {
+            e.preventDefault(); // Necessary to allow dropping
+            e.dataTransfer.dropEffect = 'move';
+        };
+
+        const handleDragEnter = (e) => {
+            e.preventDefault();
+            // Only highlight if the dragged item is not this item itself
+            // We need to check against the currently dragged item ID from the parent
+            if (onDragStartItem.current !== item.id) { 
+                setIsDragOver(true);
+            }
+        };
 
         useEffect(() => {
             if (isFocused && inputRef.current) {
@@ -567,9 +600,36 @@
                 onAddNewItemAfter(item.id);
             }
         };
+        
+        const handleDragLeave = () => {
+            setIsDragOver(false);
+        };
 
-        return (
-            <li className="flex items-center space-x-2 group">
+        const handleDrop = (e) => {
+            e.preventDefault();
+            setIsDragOver(false);
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (draggedId && draggedId !== item.id) {
+                onDropItem(draggedId, item.id); // Notify parent TaskCard to reorder
+            }
+        };
+
+        const handleDragEnd = () => {
+            setIsDragOver(false);
+            onDragEndItem(); // Notify parent TaskCard that drag has ended
+        };
+
+        return ( // Only draggable if not locked
+            <li 
+                draggable={!isLocked} 
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center space-x-2 group p-1 rounded-md transition-all ${isDragOver ? 'bg-sky-700/30 border border-sky-500' : ''} ${isLocked ? 'cursor-default' : 'cursor-grab'}`}
+            >
                 <input type="checkbox" checked={item.completed} onChange={e => onUpdate(item.id, { completed: e.target.checked })} disabled={isLocked} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" />
                 <input 
                     ref={inputRef}
@@ -623,6 +683,7 @@
         const [isNotesExpanded, setIsNotesExpanded] = useState(false);
         // State to manage which checklist item should be focused
         const [focusedItemId, setFocusedItemId] = useState(null);
+        const draggedChecklistItemId = useRef(null); // Use ref to avoid re-renders during drag
         const notesTextareaRef = useRef(null); // Ref for the notes textarea
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
@@ -654,7 +715,6 @@
                 deleteTask(task.id);
             }
         }, [task.id, settings.confirmOnDelete, deleteTask, setTaskToDelete]);
-
         const handleUpdateChecklist = useCallback((updatedList) => {
             // Checklist updates no longer automatically change task status.
             // Status is now manually set via the dropdown.
@@ -818,6 +878,25 @@
             }
         };
         
+        // Drag and Drop Handlers for Checklist Items
+        const handleDragStartChecklistItem = useCallback((id) => {
+            draggedChecklistItemId.current = id;
+        }, []);
+
+        const handleDropChecklistItem = useCallback((draggedId, targetId) => {
+            const draggedIndex = checklist.findIndex(item => item.id === draggedId);
+            const targetIndex = checklist.findIndex(item => item.id === targetId);
+
+            if (draggedIndex === -1 || targetIndex === -1) return;
+
+            const newChecklist = [...checklist];
+            const [draggedItem] = newChecklist.splice(draggedIndex, 1);
+            newChecklist.splice(targetIndex, 0, draggedItem);
+
+            handleUpdateChecklist(newChecklist);
+        }, [checklist, handleUpdateChecklist]);
+
+        const handleDragEndChecklistItem = useCallback(() => { draggedChecklistItemId.current = null; }, []);
 
         // Pulse should continue as long as the reminder time has passed,
         // regardless of whether the notification itself has fired.
@@ -848,6 +927,9 @@
                             isFocused={focusedItemId === item.id}
                             onFocusHandled={() => setFocusedItemId(null)}
                             isLocked={isLocked}
+                            onDragStartItem={handleDragStartChecklistItem}
+                            onDropItem={handleDropChecklistItem}
+                            onDragEndItem={handleDragEndChecklistItem}
                         />
                     )}</ul>
                     <Tooltip text="Add a new checklist item">
