@@ -12,7 +12,7 @@
     <style>
         body {
             font-family: sans-serif;
-            background-color: #0f172a; /* Fallback background */
+            background-color: #02ff17; /* Fallback background */
         }
         .pulse-border-high { animation: pulse-border-high 1.2s infinite; }
         @keyframes pulse-border-high { 
@@ -1120,8 +1120,7 @@
             activeSwimlanes, setActiveSwimlanes,           // Swimlane visibility state
             collapsedTagSwimlanes, toggleSwimlaneCollapse, // Swimlane collapse state & toggle fn
             collapsedColumns, setCollapsedColumns,          // Fixed column collapse state & setter
-            showCompleted, setShowCompleted, currentTasks,  // View state and derived tasks from provider
-            expandSwimlane
+            showCompleted, setShowCompleted, currentTasks   // View state and derived tasks from provider
         } = useAppContext();
 
         const tagsForCurrentView = useMemo(() => {
@@ -1164,58 +1163,6 @@
             const lastSeenVersion = localStorage.getItem('taiko-app-local-lastSeenVersion');
             if (lastSeenVersion !== CURRENT_APP_VERSION) {
                 setShowReleaseNotesModal(true);
-            }
-        }, []); // Run only once on mount
-
-        // --- Effect for handling URL GET parameters ---
-        useEffect(() => {
-            const params = new URLSearchParams(window.location.search);
-            const quickTaskTitle = params.get('quicktask') || params.get('quicktasks');
-            const priorityParam = params.get('priority')?.toLowerCase();
-            const tagParams = params.getAll('tag');
-
-            let paramsProcessed = false;
-
-            // --- Task Creation from URL ---
-            if (quickTaskTitle) {
-                paramsProcessed = true;
-                const priorityMap = { 'low': PRIORITIES.LOW, 'medium': PRIORITIES.MEDIUM, 'high': PRIORITIES.HIGH };
-                const priorityConstant = priorityMap[priorityParam] || null;
-                
-                addTask(quickTaskTitle, priorityConstant, tagParams);
-            }
-
-            // --- View/Filter setup from URL ---
-            const newActiveTags = [];
-            const newActiveSwimlanes = [];
-
-            if (priorityParam) {
-                paramsProcessed = true;
-                const priorityTitleMap = { 'low': 'Low', 'medium': 'Medium', 'high': 'High' };
-                const priorityDisplayTitle = priorityTitleMap[priorityParam];
-                if (priorityDisplayTitle) {
-                    newActiveTags.push(priorityDisplayTitle);
-                    newActiveSwimlanes.push(priorityDisplayTitle);
-                }
-            }
-
-            if (tagParams.length > 0) {
-                paramsProcessed = true;
-                newActiveTags.push(...tagParams);
-                newActiveSwimlanes.push(...tagParams);
-            }
-
-            if (newActiveTags.length > 0) {
-                setActiveTags(newActiveTags);
-            }
-
-            if (newActiveSwimlanes.length > 0) {
-                setActiveSwimlanes(prev => [...new Set([...prev, ...newActiveSwimlanes])]);
-                newActiveSwimlanes.forEach(lane => expandSwimlane(lane));
-            }
-
-            if (paramsProcessed) {
-                window.history.replaceState({}, document.title, window.location.pathname);
             }
         }, []); // Run only once on mount
 
