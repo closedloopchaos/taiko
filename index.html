@@ -845,45 +845,10 @@
             }
         };
         
-        const handleSetPriorityTag = (priorityConstantToSet) => {
-            const oldPriorityDisplayTitle = task.priority ? PRIORITY_CONFIG[task.priority].title : null;
-        
-            let newPriorityConstant = task.priority;
-            let newPriorityDisplayTitle = null;
-        
-            if (priorityConstantToSet && task.priority !== priorityConstantToSet) {
-                newPriorityConstant = priorityConstantToSet;
-                newPriorityDisplayTitle = PRIORITY_CONFIG[priorityConstantToSet].title;
-            } else if (priorityConstantToSet && task.priority === priorityConstantToSet) {
-                newPriorityConstant = null;
-            } else if (!priorityConstantToSet) {
-                newPriorityConstant = null;
-            }
-        
-            // This logic ensures that if you change a task's priority while filtering by that
-            // same priority, the filter updates to follow the task, preventing it from disappearing.
-            // We update the filters *before* the task data to prevent a re-render with inconsistent state.
-            setActiveTags(prevTags => {
-                if (oldPriorityDisplayTitle && prevTags.includes(oldPriorityDisplayTitle)) {
-                    // Remove all existing priority filters to ensure a clean state.
-                    const nonPriorityFilters = prevTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
-                    // Add the new priority filter if one was set.
-                    return newPriorityDisplayTitle ? [...nonPriorityFilters, newPriorityDisplayTitle] : nonPriorityFilters;
-                }
-                // If the old priority wasn't an active filter, don't change the filters.
-                return prevTags;
-            });
-        
-            // Now, update the task's data. React will batch this with the filter update.
-            updateTask(task.id, { priority: newPriorityConstant });
-        
-            // Finally, manage swimlane visibility as a UI enhancement.
-            if (newPriorityDisplayTitle) {
-                if (!activeSwimlanes.includes(newPriorityDisplayTitle)) {
-                    setActiveSwimlanes(prev => [...prev, newPriorityDisplayTitle]);
-                }
-                expandSwimlane(newPriorityDisplayTitle);
-            }
+        const handleSetPriority = (priorityToSet) => {
+            // If the clicked priority is the same as the current one, clear it. Otherwise, set it.
+            const newPriority = task.priority === priorityToSet ? null : priorityToSet;
+            updateTask(task.id, { priority: newPriority });
         };
 
         const handleStatusChange = (e) => {
@@ -994,7 +959,7 @@
                             {DISPLAY_PRIORITY_ORDER.map(pTag => ( /* Use DISPLAY_PRIORITY_ORDER for consistent button order */
                                 <Tooltip key={pTag} text={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}>
                                     <button 
-                                        onClick={() => handleSetPriorityTag(pTag)}
+                                        onClick={() => handleSetPriority(pTag)}
                                         disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`} /* Removed mr-1 mb-1, added flex-shrink-0 */
                                     >
                                         {PRIORITY_CONFIG[pTag].title}
@@ -1002,7 +967,7 @@
                                 </Tooltip>
                             ))}
                             <Tooltip text="Clear priority (Unprioritized)">
-                                <button onClick={() => handleSetPriorityTag(null)} disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
+                                <button onClick={() => handleSetPriority(null)} disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
                                     Clear
                                 </button>
                             </Tooltip>
@@ -1112,7 +1077,7 @@
     // --- Main Presentation Component ---
     const App = () => {
         const { 
-            tasks, addTask, 
+            tasks, addTask, expandSwimlane,
             settings, setSettings,
             taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
             allTags, deleteTask, updateTask, // Core data functions
@@ -1151,10 +1116,6 @@
         const [summaryText, setSummaryText] = useState('');
         const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
         const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
-
-
-        // State for the main "Add Task" input in the header
-        const [showMainAddTaskInput, setShowMainAddTaskInput] = useState(false);
 
         const prevTasks = usePrevious(currentTasks);
 
@@ -1246,21 +1207,32 @@
             setTaskToComplete(null);
         }, [taskToComplete, updateTask]);
 
+        const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+        const handleAddTaskFromModal = ({ title, priority, tags }) => {
+            // Add the task first
+            addTask(title, priority, tags);
+            
+            // Now, ensure swimlanes are active for any new tags
+            tags.forEach(tag => {
+                if (!activeSwimlanes.includes(tag)) {
+                    setActiveSwimlanes(prev => [...prev, tag]);
+                }
+                expandSwimlane(tag); // Ensure it's visible
+            });
+
+            setShowAddTaskModal(false);
+        };
         const handleConfirmDeleteAllCompleted = useCallback(() => {
             deleteAllCompletedTasks();
             setShowDeleteAllCompletedModal(false);
         }, [deleteAllCompletedTasks]);
 
-
-        const handleAddTask = () => { 
-            setShowMainAddTaskInput(true); // Show the input form instead of adding directly
-        };
         const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
         
-        const handleCompletedClick = () => {
-            const newCompletedState = !showCompleted;
-            setShowCompleted(newCompletedState);
-            setActiveTags([]);
+        const handleViewChange = (isCompletedView) => {
+            if (showCompleted === isCompletedView) return; // Avoid unnecessary state updates
+            setShowCompleted(isCompletedView);
+            setActiveTags([]); // Reset filters when changing views
         };
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
 
@@ -1287,7 +1259,7 @@
                 summary += "========================================\n\n";
 
                 completedTasks.forEach(task => {
-                    summary += `TASK: ${task.title}\n`;
+                    summary += `Task: ${task.title}\n`;
                     
                     const priorityTitle = PRIORITY_CONFIG[task.priority]?.title || PRIORITY_CONFIG.null.title;
                     summary += `Priority: ${priorityTitle}\n`;
@@ -1351,27 +1323,28 @@
         }, [swimlaneTasks, settings.autoCollapse, setActiveSwimlanes]); // Dependencies: swimlaneTasks, autoCollapse setting, and the stable setter.
 
         const handleTagFilterClick = (tag) => {
-            const isPriorityTag = PRIORITY_TITLE_TO_CONSTANT_MAP[tag]; // Will be truthy (the constant string) if 'tag' is a priority display title
+            const isPriorityTag = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
 
             setActiveTags(prevActiveTags => {
                 if (isPriorityTag) {
-                    // It's a priority filter
-                    if (prevActiveTags.includes(tag)) {
-                        // Clicked an active priority filter: deactivate it
-                        return prevActiveTags.filter(t => t !== tag);
+                    // Clicked a priority filter.
+                    // If it's already the active filter, clear all filters.
+                    // Otherwise, make it the ONLY active filter.
+                    if (prevActiveTags.length === 1 && prevActiveTags[0] === tag) {
+                        return [];
                     } else {
-                        // Clicked an inactive priority filter:
-                        // 1. Remove all other active priority filters
-                        const nonPriorityFilters = prevActiveTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
-                        // 2. Add the newly clicked priority filter
-                        return [...nonPriorityFilters, tag];
+                        return [tag];
                     }
                 } else {
-                    // It's a custom tag filter: toggle normally
-                    if (prevActiveTags.includes(tag)) {
-                        return prevActiveTags.filter(t => t !== tag);
+                    // Clicked a custom tag filter.
+                    // Remove any active priority filters.
+                    const customTagsOnly = prevActiveTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
+                    
+                    // Now, toggle the clicked custom tag within that list.
+                    if (customTagsOnly.includes(tag)) {
+                        return customTagsOnly.filter(t => t !== tag);
                     } else {
-                        return [...prevActiveTags, tag];
+                        return [...customTagsOnly, tag];
                     }
                 }
             });
@@ -1379,14 +1352,12 @@
 
         const clearTagFilter = () => setActiveTags([]);
 
-        // `tasksMatchingActiveFilters` is the set of tasks that pass the currently active filters.
-        // This is the base for calculating the counts shown on the filter buttons.
         const tasksMatchingActiveFilters = useMemo(() => {
             if (activeTags.length === 0) return currentTasks;
             return currentTasks.filter(task =>
-                activeTags.every(activeTag => {
+                activeTags.some(activeTag => {
                     const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag];
-                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag));
+                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag))
                 })
             );
         }, [currentTasks, activeTags]);
@@ -1414,31 +1385,6 @@
         const handleDragOverSwimlane = (e) => {
             e.preventDefault(); // Necessary to allow dropping
         };
-
-        // This count is for the "All" button, reflecting the total number of tasks currently visible after all filters.
-        const allTasksCountForFilterDisplay = useMemo(() => tasksMatchingActiveFilters.length, [tasksMatchingActiveFilters]);
-
-        // These counts are for the priority filter buttons.
-        // They should reflect how many tasks *within the currently filtered set* belong to each priority.
-        const priorityFilterCountsForDisplay = useMemo(() => {
-            const counts = {};
-            DISPLAY_PRIORITY_ORDER.forEach(priorityConstant => {
-                const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
-                counts[displayTitle] = tasksMatchingActiveFilters.filter(task => task.priority === priorityConstant).length;
-            });
-            return counts;
-        }, [tasksMatchingActiveFilters]);
-
-        // These counts are for the custom tag filter buttons.
-        // They should reflect how many tasks *within the currently filtered set* have each custom tag.
-        const customTagFilterCountsForDisplay = useMemo(() => {
-            const counts = {};
-            const customTagsToDisplay = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag));
-            customTagsToDisplay.forEach(tag => {
-                counts[tag] = tasksMatchingActiveFilters.filter(task => task.tags && task.tags.includes(tag)).length;
-            });
-            return counts;
-        }, [tasksMatchingActiveFilters, allTags]);
 
         const { swimlaneTasks, unclassifiedTasks } = useMemo(() => { // Renamed priorityTasks to unclassifiedTasks
             const st = {};
@@ -1501,6 +1447,7 @@
                 {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
+                {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
                 
                 <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3">
                     {/* --- Top Row: Title & Clock --- */}
@@ -1533,24 +1480,33 @@
                         <div className="flex-grow"></div>
 
                         <div className="flex items-center flex-wrap gap-2">
-                            <Tooltip text={showCompleted ? "View Active Tasks" : "View Completed Tasks"}>
-                                <button onClick={handleCompletedClick} className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all ${showCompleted ? 'bg-green-600 hover:bg-green-500 focus:ring-green-400' : 'bg-slate-700'}`}>{showCompleted ? 'View Active' : 'View Completed'}</button>
-                            </Tooltip>
-                            {showMainAddTaskInput ? (
-                                <QuickAddInputForm onAdd={(title) => { addTask(title); setShowMainAddTaskInput(false); }} onCancel={() => setShowMainAddTaskInput(false)} />
-                            ) : (
-                                <AddTaskButton onAddTask={handleAddTask} />
-                            )}
+                            <AddTaskButton onAddTask={() => setShowAddTaskModal(true)} />
                         </div>
                     </div>
                 </header>
                 
                 <div className="px-6 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
                     <div className="flex items-center space-x-2 flex-wrap">
+                        {/* --- Primary View Tabs --- */}
+                        <Tooltip text="Show active tasks">
+                            <button onClick={() => handleViewChange(false)}
+                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                    Active
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Show completed tasks">
+                            <button onClick={() => handleViewChange(true)}
+                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${showCompleted ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                                    Completed <span className="opacity-80">({completedTasksCount})</span>
+                            </button>
+                        </Tooltip>
+
+                        <div className="border-l border-slate-700 h-5 mx-2"></div>
+                        {/* --- Secondary Filter Tabs --- */}
                         <Tooltip text="Show all tasks (clear tag filters)">
                             <button onClick={clearTagFilter} // This button clears all activeTags, including priority titles
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                    All <span className="opacity-80"> ({allTasksCountForFilterDisplay})</span>
+                                    All <span className="opacity-80"> ({allTasksCount})</span>
                                 </button>
                         </Tooltip>
                         {/* Render Priority Filter Buttons First in Specific Order */}
@@ -1562,7 +1518,7 @@
                                         onClick={() => handleTagFilterClick(displayTitle)}
                                         className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}
                                     >
-                                        {displayTitle} <span className="opacity-80">({priorityFilterCountsForDisplay[displayTitle] || 0})</span>
+                                        {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
                                     </button>
                                 </Tooltip>
                             );
@@ -1575,7 +1531,7 @@
                             <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
                                 <button onClick={() => handleTagFilterClick(tag)}
                                     className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                    {tag} <span className="opacity-80"> ({customTagFilterCountsForDisplay[tag] || 0})</span>
+                                    {tag} <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>
                                 </button>
                             </Tooltip>
                         ))}
@@ -1928,6 +1884,110 @@
         );
     });
 
+    const AddTaskModal = ({ onAdd, onCancel, allTags }) => {
+        const [title, setTitle] = useState('');
+        const [priority, setPriority] = useState(null);
+        const [tags, setTags] = useState([]);
+        const [currentTagInput, setCurrentTagInput] = useState('');
+        const inputRef = useRef(null);
+
+        useEffect(() => {
+            if (inputRef.current) inputRef.current.focus();
+        }, []);
+
+        const handleAdd = () => {
+            if (title.trim()) {
+                onAdd({ title: title.trim(), priority, tags });
+            }
+        };
+
+        const handleAddTag = () => {
+            const trimmedTag = currentTagInput.trim();
+            if (trimmedTag && !tags.includes(trimmedTag)) {
+                setTags([...tags, trimmedTag]);
+            }
+            setCurrentTagInput('');
+        };
+
+        const handleRemoveTag = (tagToRemove) => {
+            setTags(tags.filter(tag => tag !== tagToRemove));
+        };
+
+        return (
+            <Modal onClose={onCancel}>
+                <ModalContent title="Add New Task" onClose={onCancel}>
+                    <div className="space-y-4">
+                        {/* Title Input */}
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAdd(); }}
+                            placeholder="Enter task title..."
+                            className="w-full bg-slate-900/80 text-slate-200 text-lg p-3 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500"
+                        />
+
+                        {/* Priority Selection */}
+                        <div className="pt-2 border-t border-slate-700/50">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm text-slate-400">Priority:</span>
+                                {DISPLAY_PRIORITY_ORDER.map(pConst => (
+                                    <Tooltip key={pConst} text={`Set priority to ${PRIORITY_CONFIG[pConst].title}`}>
+                                        <button 
+                                            onClick={() => setPriority(pConst === priority ? null : pConst)}
+                                            className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${priority === pConst ? `${PRIORITY_CONFIG[pConst].bgColor} ${PRIORITY_CONFIG[pConst].borderColor} ${PRIORITY_CONFIG[pConst].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pConst].bgColor}`}`}
+                                        >
+                                            {PRIORITY_CONFIG[pConst].title}
+                                        </button>
+                                    </Tooltip>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Tagging UI */}
+                        <div className="pt-2 border-t border-slate-700/50">
+                            <label className="text-sm text-slate-400 mb-2 block">Tags:</label>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {tags.map(tag => (
+                                    <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
+                                        {tag}
+                                        <Tooltip text={`Remove tag: ${tag}`}>
+                                            <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
+                                        </Tooltip>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex">
+                                <input
+                                    list="tag-suggestions-modal"
+                                    type="text"
+                                    value={currentTagInput}
+                                    onChange={(e) => setCurrentTagInput(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                                    placeholder="Add a tag..."
+                                    className="bg-slate-900/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0"
+                                />
+                                <datalist id="tag-suggestions-modal">
+                                    {allTags.map(tag => <option key={tag} value={tag} />)}
+                                </datalist>
+                                <Tooltip text="Add this tag">
+                                    <button onClick={handleAddTag} className="ml-2 text-sm bg-sky-600 text-white px-4 py-1 rounded-md hover:bg-sky-500">Add</button>
+                                </Tooltip>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-2 pt-3 border-t border-slate-700/50">
+                            <button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button>
+                            <button onClick={handleAdd} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Add Task</button>
+                        </div>
+                    </div>
+                </ModalContent>
+            </Modal>
+        );
+    };
+
     const Modal = ({ children, onClose }) => <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">{children}</div>;
     const ModalContent = ({ title, children, onClose, headerActions }) => (
         <div 
@@ -1943,11 +2003,6 @@
     );
     const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><Tooltip text="Keep task active"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm completion"><button onClick={onConfirm} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></Tooltip></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
-    const DeleteAllCompletedModal = ({ onConfirm, onCancel, count }) => (
-        <Modal onClose={onCancel}>
-            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion of all completed tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></Tooltip></div></div>
-        </Modal>
-    );
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         return ( 
@@ -1983,6 +2038,11 @@
             </Modal> 
         );
     };
+    const DeleteAllCompletedModal = ({ onConfirm, onCancel, count }) => (
+        <Modal onClose={onCancel}>
+            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion of all completed tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></Tooltip></div></div>
+        </Modal>
+    );
 
     const ManageSwimlanesModal = ({ allTags, activeSwimlanes, setSwimlanes, onClose }) => {
         const handleToggle = (tag) => {
