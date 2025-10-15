@@ -566,6 +566,7 @@
     }) => {
         const inputRef = useRef(null);
         const [isDragOver, setIsDragOver] = useState(false); // Local state for drag over visual feedback
+        const [text, setText] = useState(item.text); // Local state for the input text
 
         const handleDragStart = (e) => {
             e.stopPropagation(); // Prevent parent elements from also being dragged
@@ -595,9 +596,21 @@
             }
         }, [isFocused, onFocusHandled]);
 
+        // Sync local state if the prop changes from outside
+        useEffect(() => {
+            setText(item.text);
+        }, [item.text]);
+
+        const handleBlur = () => {
+            if (text !== item.text) { // Only update if there's a change
+                onUpdate(item.id, { text });
+            }
+        };
+
         const handleKeyDown = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                handleBlur(); // Save changes on Enter
                 onAddNewItemAfter(item.id);
             }
         };
@@ -641,9 +654,10 @@
                 <input 
                     ref={inputRef}
                     type="text" 
-                    value={item.text} 
-                    onChange={e => onUpdate(item.id, { text: e.target.value })} 
+                    value={text} 
+                    onChange={e => setText(e.target.value)} 
                     onKeyDown={handleKeyDown}
+                    onBlur={handleBlur}
                     readOnly={isLocked}
                     className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700 read-only:cursor-default`} 
                 />
