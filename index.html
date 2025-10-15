@@ -486,21 +486,15 @@
         const timeZone = useMemo(() => TIMEZONE_MAP[timezone], [timezone]);
         
         const formattedTime = time.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
+        
         return (
-            // This container will center its direct children: time, date, and button
-            <div className="flex flex-col items-end text-slate-300">
-                {/* Time, now clickable and with a hover tooltip for the timezone */}
-                <div 
-                    onClick={onTimezoneChange}
-                    className="text-2xl md:text-4xl font-mono tracking-wider cursor-pointer relative group"
-                    title="Click to change timezone" // Added title attribute for accessibility
-                >
-                    {formattedTime}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap bg-slate-700 text-xs font-mono text-white px-2 py-1 rounded-md shadow-lg pointer-events-none">
-                        Timezone: {timezone}
-                    </div>
-                </div>
+            <div className="flex flex-row items-baseline space-x-2 text-slate-300">
+                <span className="text-2xl md:text-4xl font-mono tracking-wider">{formattedTime}</span>
+                <Tooltip text="Click to change timezone">
+                    <button onClick={onTimezoneChange} className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors">
+                        {timezone}
+                    </button>
+                </Tooltip>
             </div>
         );
     });
@@ -1117,6 +1111,21 @@
             localStorage.setItem('taiko-app-local-lastSeenVersion', CURRENT_APP_VERSION);
         };
 
+        // --- Effect for Global Keyboard Shortcuts ---
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+                // Use 'a' key to open Add Task modal. Avoid when typing in an input.
+                if (e.key.toLowerCase() === 'a' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+                    e.preventDefault();
+                    setShowAddTaskModal(true);
+                }
+            };
+
+            window.addEventListener('keydown', handleKeyDown);
+            return () => {
+                window.removeEventListener('keydown', handleKeyDown);
+            };
+        }, []); // Empty dependency array ensures this runs only once
 
         useEffect(() => {
             // Ensure that when the view switches between active and archived,
@@ -1125,6 +1134,8 @@
         }, [currentTasks]);
 
         const allTasksCount = useMemo(() => currentTasks.length, [currentTasks]);
+
+        const activeTasksCount = useMemo(() => tasks.filter(t => t.status !== TASK_STATUS.DONE).length, [tasks]);
 
         const completedTasksCount = useMemo(() => tasks.filter(t => t.status === TASK_STATUS.DONE).length, [tasks]);
 
@@ -1188,7 +1199,7 @@
 
         const handleConfirmComplete = useCallback(() => {
             if (!taskToComplete) return;
-            updateTask(taskToComplete.id, { status: TASK_STATUS.DONE });
+            updateTask(taskToComplete.id, { status: TASK_STATUS.DONE, reminderAt: null, reminderFired: false });
             setTaskToComplete(null);
         }, [taskToComplete, updateTask]);
 
@@ -1408,13 +1419,17 @@
                 
                 // Determine how many columns would be rendered
                 let columnCount = 0;
-                if (unclassifiedTasks.length > 0 || activeTags.length === 0) {
-                    columnCount++; // The "Unsorted" column
+                const shouldRenderUnsorted = unclassifiedTasks.length > 0 || (activeTags.length === 0 && activeSwimlanes.length === 0);
+                if (shouldRenderUnsorted) {
+                    columnCount++;
                 }
-                columnCount += activeSwimlanes.filter(item => {
+
+                const renderedSwimlanesCount = activeSwimlanes.filter(item => {
                     const tasksForThisSwimlane = swimlaneTasks[item] || [];
-                    return tasksForThisSwimlane.length > 0 || activeTags.length === 0;
+                    const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : (collapsedTagSwimlanes[item] || false);
+                    return tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsed);
                 }).length;
+                columnCount += renderedSwimlanesCount;
 
                 const columnWidth = 384; // w-96 is 24rem = 384px
                 const gapWidth = 16; // space-x-4 is 1rem = 16px
@@ -1424,7 +1439,7 @@
             } else {
                 setForceVertical(false); // Don't force vertical on small screens, it's already handled
             }
-        }, [activeSwimlanes, unclassifiedTasks, windowWidth, swimlaneTasks, activeTags, settings.autoCollapse]); // Re-check when columns or window size change
+        }, [activeSwimlanes, unclassifiedTasks, windowWidth, swimlaneTasks, activeTags, settings.autoCollapse, collapsedTagSwimlanes]); // Re-check when columns or window size change
         const isEffectiveVerticalLayout = forceVertical || windowWidth < 768; // Force vertical on small screens or when content overflows
         const mainLayoutClasses = isEffectiveVerticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4 items-start';
         const backgroundOverlayClass = showCompleted ? 'bg-green-900/10' : '';
@@ -1447,7 +1462,6 @@
                             <TaikoLogo />
                             <div>
                                 <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
-                                <p className="text-slate-400 text-sm hidden md:block">Operations Task Master</p>
                             </div>
                         </div>
                         <div className="flex-shrink-0">
@@ -1467,6 +1481,7 @@
                     <FilterToolbar
                         isSmallScreen={windowWidth < 768}
                         showCompleted={showCompleted}
+                        activeTasksCount={activeTasksCount}
                         completedTasksCount={completedTasksCount}
                         activeTags={activeTags}
                         allTasksCount={allTasksCount}
@@ -1571,6 +1586,7 @@
     const FilterToolbar = React.memo(({
         isSmallScreen,
         showCompleted,
+        activeTasksCount,
         completedTasksCount,
         activeTags,
         allTasksCount,
@@ -1625,7 +1641,7 @@
         return (
             <div className="flex items-center space-x-2 flex-wrap">
                 {/* --- Primary View Tabs (Always Visible) --- */}
-                <Tooltip text="Show active tasks"><button onClick={() => onViewChange(false)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Active</button></Tooltip>
+                <Tooltip text="Show active tasks"><button onClick={() => onViewChange(false)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Active <span className="opacity-80">({activeTasksCount})</span></button></Tooltip>
                 <Tooltip text="Show completed tasks"><button onClick={() => onViewChange(true)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${showCompleted ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Completed <span className="opacity-80">({completedTasksCount})</span></button></Tooltip>
                 <div className="border-l border-slate-700 h-5 mx-2"></div>
 
@@ -2460,3 +2476,4 @@
     </script>
 </body>
 </html>
+ 
