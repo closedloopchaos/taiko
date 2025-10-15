@@ -216,7 +216,6 @@
         const [settings, setSettings] = useState({ 
             confirmOnDelete: true, 
             autoCollapse: true, // Default to true
-            verticalLayout: false
         });
 
         // --- Modal-related State ---
@@ -224,9 +223,8 @@
         const [taskToDelete, setTaskToDelete] = useState(null);
         // --- UI Interaction State (lifted from App) ---
         const [showCompleted, setShowCompleted] = useState(false);
-        const [activeTags, setActiveTags] = useState([]);
-        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved from App
-        const [activeSwimlanes, setActiveSwimlanes] = useState([]);
+        const [activeTags, setActiveTags] = useState([]); // For filtering
+        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({});
         const [collapsedColumns, setCollapsedColumns] = useState({ 'unsorted': false }); // For fixed columns like "Unsorted"
 
         const appId = 'taiko-app-local';
@@ -240,8 +238,7 @@
                 confirmOnDelete: true,
                 showTooltips: true,
                 autoCollapse: true,
-            animationSettings: { enabled: true, particleCount: 250, connectionDistance: 170, particleSpeed: 0.5 },
-                verticalLayout: false
+                animationSettings: { enabled: true, particleCount: 250, connectionDistance: 170, particleSpeed: 0.5 }
             };
 
             const savedSettings = localStorage.getItem(`${appId}-settings`);
@@ -268,9 +265,6 @@
             const savedActiveTags = localStorage.getItem(`${appId}-activeTags`);
             if (savedActiveTags) try { setActiveTags(JSON.parse(savedActiveTags)); } catch { console.error("Could not parse saved active tags."); setActiveTags([]); }
 
-            const savedActiveSwimlanes = localStorage.getItem(`${appId}-activeSwimlanes`);
-            if (savedActiveSwimlanes) try { setActiveSwimlanes(JSON.parse(savedActiveSwimlanes)); } catch { console.error("Could not parse saved active swimlanes."); setActiveSwimlanes([]); }
-
             const savedCollapsedTagSwimlanes = localStorage.getItem(`${appId}-collapsedTagSwimlanes`);
             if (savedCollapsedTagSwimlanes) try { setCollapsedTagSwimlanes(JSON.parse(savedCollapsedTagSwimlanes)); } catch { console.error("Could not parse saved collapsed tag swimlanes."); setCollapsedTagSwimlanes({}); }
             
@@ -295,13 +289,12 @@
                 localStorage.setItem(`${appId}-settings`, JSON.stringify(settings));
                 localStorage.setItem(`${appId}-showCompleted`, JSON.stringify(showCompleted));
                 localStorage.setItem(`${appId}-activeTags`, JSON.stringify(activeTags));
-                localStorage.setItem(`${appId}-activeSwimlanes`, JSON.stringify(activeSwimlanes));
                 localStorage.setItem(`${appId}-collapsedTagSwimlanes`, JSON.stringify(collapsedTagSwimlanes));
                 localStorage.setItem(`${appId}-collapsedColumns`, JSON.stringify(collapsedColumns));
             } catch (error) {
                 console.error("Failed to save state to localStorage", error);
             }
-        }, [tasks, settings, showCompleted, activeTags, activeSwimlanes, collapsedTagSwimlanes, collapsedColumns, appId]);
+        }, [tasks, settings, showCompleted, activeTags, collapsedTagSwimlanes, collapsedColumns, appId]);
 
         // --- Effect to dispatch animation settings changes to the global scope ---
         useEffect(() => {
@@ -370,10 +363,6 @@
             return Array.from(customTagsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
         }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Depends on all tasks now
 
-        // --- Swimlane Collapse Management ---
-        const expandSwimlane = useCallback((swimlaneName) => {
-            setCollapsedTagSwimlanes(prev => ({ ...prev, [swimlaneName]: false }));
-        }, []); // setCollapsedTagSwimlanes is stable
         const toggleSwimlaneCollapse = useCallback((swimlaneName) => {
             setCollapsedTagSwimlanes(prev => ({ ...prev, [swimlaneName]: !prev[swimlaneName] }));
         }, []); // setCollapsedTagSwimlanes is stable
@@ -381,14 +370,12 @@
 
         const contextValue = useMemo(() => ({
             tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks,
-            settings, setSettings, allTags, 
+            settings, setSettings, allTags,
             taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
             activeTags, setActiveTags,
-            activeSwimlanes, setActiveSwimlanes,
             collapsedTagSwimlanes, setCollapsedTagSwimlanes,
             collapsedColumns, setCollapsedColumns, // Added for fixed columns
-            expandSwimlane,        
             toggleSwimlaneCollapse,
             showCompleted, setShowCompleted, currentTasks
         }), [
@@ -396,11 +383,9 @@
             settings, setSettings, allTags, 
             taskToComplete, setTaskToComplete,
             taskToDelete, setTaskToDelete,
-            activeTags, setActiveTags,
-            activeSwimlanes, setActiveSwimlanes,
+            activeTags, setActiveTags, 
             collapsedTagSwimlanes, setCollapsedTagSwimlanes,
-            collapsedColumns, setCollapsedColumns,
-            expandSwimlane, toggleSwimlaneCollapse,
+            collapsedColumns, setCollapsedColumns, toggleSwimlaneCollapse,
             showCompleted, currentTasks
         ]);
         
@@ -698,7 +683,7 @@
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone, isCompact }) => { // Added clockTimezone and isCompact props
-        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, setTaskToComplete, setActiveTags, setActiveSwimlanes, expandSwimlane, activeTags } = useAppContext();
+        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, setTaskToComplete, activeTags } = useAppContext();
         const now = useNow();
         const isLocked = task.status === TASK_STATUS.DONE;
 
@@ -782,24 +767,9 @@
             );
     
             if (trimmedNewTag && !isPriorityTitle && !currentTags.includes(trimmedNewTag)) {
-                // Get custom tags *before* adding the new one.
-                // task.tags should only store custom tags.
-                const existingCustomTagsCount = currentTags.length;
-    
                 const newTagsArray = [...currentTags, trimmedNewTag];
                 updateTask(task.id, { tags: newTagsArray });
     
-                // Only auto-activate swimlane if this is the *first* custom tag added to the task,
-                // and ensure the tag itself is not a priority display title (which it shouldn't be for custom tags).
-                if (existingCustomTagsCount === 0 && !PRIORITY_DISPLAY_TITLES_ARRAY.includes(trimmedNewTag)) {
-                    setActiveSwimlanes(prevActiveSwimlanes => {
-                        expandSwimlane(trimmedNewTag); 
-                        if (!prevActiveSwimlanes.includes(trimmedNewTag)) {
-                            return [...prevActiveSwimlanes, trimmedNewTag]; 
-                        }
-                        return prevActiveSwimlanes;
-                    });
-                }
             } else if (isPriorityTitle) {
                 setTagError('Cannot add "Low", "Medium", or "High" as custom tags. Use priority buttons.');
                 playTone(220, 0.3, 'square', 0.2); // Play a low, short error tone
@@ -811,24 +781,6 @@
             const currentTags = task.tags || [];
             const newTags = (task.tags || []).filter(tag => tag !== tagToRemove);
             updateTask(task.id, { tags: newTags });
-
-            // After removing the tag, check if the task still has tags.
-            // If it does, find the first remaining tag that corresponds to a potential swimlane
-            // (either a priority display title or a custom tag) and ensure that swimlane
-            // is active and expanded. This helps guide the task to a relevant column.
-            
-            // Find the first remaining tag that is either a priority display title or a custom tag
-            const firstRemainingPotentialSwimlaneTag = newTags.find(tag => 
-                PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag) || allTags.includes(tag) // Check if it's a known tag/priority
-            );
-
-            if (firstRemainingPotentialSwimlaneTag) {
-                 // Ensure this potential swimlane is active and expanded
-                 setActiveSwimlanes(prevActiveSwimlanes => {
-                    expandSwimlane(firstRemainingPotentialSwimlaneTag); // Expand it
-                    return prevActiveSwimlanes.includes(firstRemainingPotentialSwimlaneTag) ? prevActiveSwimlanes : [...prevActiveSwimlanes, firstRemainingPotentialSwimlaneTag]; // Add to active if not already
-                 });
-            }
         };
 
         const handleSetReminder = useCallback(() => {
@@ -1096,12 +1048,11 @@
     // --- Main Presentation Component ---
     const App = () => {
         const { 
-            tasks, addTask, expandSwimlane,
+            tasks, addTask,
             settings, setSettings,
             taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
             allTags, deleteTask, updateTask, // Core data functions
             activeTags, setActiveTags,                     // Filter state
-            activeSwimlanes, setActiveSwimlanes,           // Swimlane visibility state
             collapsedTagSwimlanes, toggleSwimlaneCollapse, // Swimlane collapse state & toggle fn
             collapsedColumns, setCollapsedColumns,          // Fixed column collapse state & setter
             showCompleted, setShowCompleted, currentTasks   // View state and derived tasks from provider
@@ -1127,13 +1078,13 @@
         const [showSettings, setShowSettings] = useState(false);
         // const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved to AppProvider
         const [clockTimezone, setClockTimezone] = useState('EST');
-        const [showSwimlaneModal, setShowSwimlaneModal] = useState(false);
         const [draggedSwimlane, setDraggedSwimlane] = useState(null); // For swimlane reordering
 
         // State for the summary modal
         const [showSummaryModal, setShowSummaryModal] = useState(false);
         const [summaryText, setSummaryText] = useState('');
         const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
+        const [forceVertical, setForceVertical] = useState(false);
         const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
 
         const windowWidth = useWindowWidth();
@@ -1230,17 +1181,8 @@
         const [showAddTaskModal, setShowAddTaskModal] = useState(false);
         const handleAddTaskFromModal = ({ title, priority, tags }) => {
             // Add the task first
-            addTask(title, priority, tags);
-            
-            // Now, ensure swimlanes are active for any new tags
-            tags.forEach(tag => {
-                if (!activeSwimlanes.includes(tag)) {
-                    setActiveSwimlanes(prev => [...prev, tag]);
-                }
-                expandSwimlane(tag); // Ensure it's visible
-            });
-
-            setShowAddTaskModal(false);
+            addTask(title, priority, tags); 
+            setShowAddTaskModal(false); 
         };
         const handleConfirmDeleteAllCompleted = useCallback(() => {
             deleteAllCompletedTasks();
@@ -1319,29 +1261,6 @@
             setShowSummaryModal(true);
         }, [tasks, clockTimezone]); // Dependency on `tasks` and `clockTimezone` state
 
-        useEffect(() => {
-            if (settings.autoCollapse) {
-                // Use the functional update form of setActiveSwimlanes
-                // to get the latest activeSwimlanes without adding it to dependencies,
-                // and to conditionally update only if changes are needed.
-                setActiveSwimlanes(currentActiveSwimlanes => {
-                    const emptyActiveSwimlanesInThisRun = currentActiveSwimlanes.filter(swimlaneName => {
-                        const tasksInSwimlane = swimlaneTasks[swimlaneName] || []; // swimlaneTasks is from the outer scope, captured at effect run time
-                        return tasksInSwimlane.length === 0;
-                    });
-
-                    if (emptyActiveSwimlanesInThisRun.length > 0) {
-                        const nextActiveSwimlanes = currentActiveSwimlanes.filter(name => !emptyActiveSwimlanesInThisRun.includes(name));
-                        // Only return a new array if it's actually different to prevent unnecessary re-renders/loops
-                        if (nextActiveSwimlanes.length !== currentActiveSwimlanes.length) {
-                            return nextActiveSwimlanes;
-                        }
-                    }
-                    return currentActiveSwimlanes; // No change needed
-                });
-            }
-        }, [swimlaneTasks, settings.autoCollapse, setActiveSwimlanes]); // Dependencies: swimlaneTasks, autoCollapse setting, and the stable setter.
-
         const handleTagFilterClick = (tag) => {
             const isPriorityTag = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
 
@@ -1381,20 +1300,20 @@
                 })
             );
         }, [currentTasks, activeTags]);
-        const handleDropSwimlane = (targetSwimlaneName) => {
-            if (!draggedSwimlane || draggedSwimlane === targetSwimlaneName) {
-                setDraggedSwimlane(null);
-                return;
-            }
-            const newActiveSwimlanes = [...activeSwimlanes];
-            const draggedIndex = newActiveSwimlanes.indexOf(draggedSwimlane);
-            const targetIndex = newActiveSwimlanes.indexOf(targetSwimlaneName);
-
-            newActiveSwimlanes.splice(draggedIndex, 1); // Remove dragged item
-            newActiveSwimlanes.splice(targetIndex, 0, draggedSwimlane); // Insert at new position
-            setActiveSwimlanes(newActiveSwimlanes);
-            setDraggedSwimlane(null);
-        };
+        // const handleDropSwimlane = (targetSwimlaneName) => {
+        //     if (!draggedSwimlane || draggedSwimlane === targetSwimlaneName) {
+        //         setDraggedSwimlane(null);
+        //         return;
+        //     }
+        //     const newActiveSwimlanes = [...activeSwimlanes];
+        //     const draggedIndex = newActiveSwimlanes.indexOf(draggedSwimlane);
+        //     const targetIndex = newActiveSwimlanes.indexOf(targetSwimlaneName);
+        //
+        //     newActiveSwimlanes.splice(draggedIndex, 1); // Remove dragged item
+        //     newActiveSwimlanes.splice(targetIndex, 0, draggedSwimlane); // Insert at new position
+        //     setActiveSwimlanes(newActiveSwimlanes);
+        //     setDraggedSwimlane(null);
+        // };
         // --- Swimlane Drag and Drop Handlers ---
         const handleDragStartSwimlane = (e, swimlaneName) => {
             setDraggedSwimlane(swimlaneName);
@@ -1406,7 +1325,7 @@
             e.preventDefault(); // Necessary to allow dropping
         };
 
-        const { swimlaneTasks, unclassifiedTasks } = useMemo(() => { // Renamed priorityTasks to unclassifiedTasks
+        const { swimlaneTasks, unclassifiedTasks, activeSwimlanes } = useMemo(() => {
             const st = {};
             const ut = []; // unclassifiedTasks
 
@@ -1417,6 +1336,17 @@
                     return (a.rank ?? Infinity) - (b.rank ?? Infinity); 
                 }
             };
+
+            // Determine active swimlanes based on tasks that match filters
+            const swimlanesWithTasks = new Set();
+            tasksMatchingActiveFilters.forEach(task => {
+                if (task.priority) {
+                    swimlanesWithTasks.add(PRIORITY_CONFIG[task.priority].title);
+                }
+                (task.tags || []).forEach(tag => swimlanesWithTasks.add(tag));
+            });
+            // This defines the swimlanes to be rendered.
+            const activeSwimlanes = Array.from(swimlanesWithTasks).sort();
 
             for (const task of tasksMatchingActiveFilters) {
                 let inSwimlane = false;
@@ -1451,10 +1381,37 @@
             for (const swimlaneName in st) {
                 st[swimlaneName].sort(taskSorter);
             }
-            return { swimlaneTasks: st, unclassifiedTasks: ut };
-        }, [tasksMatchingActiveFilters, activeSwimlanes, showCompleted, PRIORITY_TITLE_TO_CONSTANT_MAP]);
+            return { swimlaneTasks: st, unclassifiedTasks: ut, activeSwimlanes };
+        }, [tasksMatchingActiveFilters, showCompleted, PRIORITY_TITLE_TO_CONSTANT_MAP]);
         
-        const isEffectiveVerticalLayout = settings.verticalLayout || windowWidth < 768; // Force vertical on small screens
+        const mainContainerRef = useRef(null);
+        
+        // This effect checks if the horizontal columns overflow their container.
+        // If they do, it forces a vertical layout.
+        useEffect(() => {
+            if (mainContainerRef.current && windowWidth >= 768) {
+                const containerWidth = mainContainerRef.current.clientWidth;
+                
+                // Determine how many columns would be rendered
+                let columnCount = 0;
+                if (unclassifiedTasks.length > 0 || activeTags.length === 0) {
+                    columnCount++; // The "Unsorted" column
+                }
+                columnCount += activeSwimlanes.filter(item => {
+                    const tasksForThisSwimlane = swimlaneTasks[item] || [];
+                    return tasksForThisSwimlane.length > 0 || activeTags.length === 0;
+                }).length;
+
+                const columnWidth = 384; // w-96 is 24rem = 384px
+                const gapWidth = 16; // space-x-4 is 1rem = 16px
+                const totalRequiredWidth = (columnCount * columnWidth) + (Math.max(0, columnCount - 1) * gapWidth);
+
+                setForceVertical(totalRequiredWidth > containerWidth);
+            } else {
+                setForceVertical(false); // Don't force vertical on small screens, it's already handled
+            }
+        }, [activeSwimlanes, unclassifiedTasks, windowWidth, swimlaneTasks, activeTags, settings.autoCollapse]); // Re-check when columns or window size change
+        const isEffectiveVerticalLayout = forceVertical || windowWidth < 768; // Force vertical on small screens or when content overflows
         const mainLayoutClasses = isEffectiveVerticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4 items-start';
         const backgroundOverlayClass = showCompleted ? 'bg-green-900/10' : '';
         
@@ -1464,7 +1421,6 @@
                 {taskToComplete && <CompleteConfirmationModal task={taskToComplete} onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} />}
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                 {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
-                {showSwimlaneModal && <ManageSwimlanesModal allTags={allTags} activeSwimlanes={activeSwimlanes} setSwimlanes={setActiveSwimlanes} onClose={() => setShowSwimlaneModal(false)} />}
                 {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
@@ -1509,7 +1465,7 @@
                     />
                 </div>
 
-                <main className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass} ${!settings.verticalLayout ? 'overflow-x-auto' : 'overflow-y-auto'}`}>
+                <main ref={mainContainerRef} className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass} ${!isEffectiveVerticalLayout ? 'overflow-x-auto' : 'overflow-y-auto'}`}>
                     {showCompleted ? (
                         <PriorityColumn
                             key="completed-column"
@@ -1571,9 +1527,9 @@
                                     <div
                                         key={item}
                                         draggable={!isEffectiveVerticalLayout} // Only allow drag in horizontal mode
-                                        onDragStart={(e) => !isEffectiveVerticalLayout && handleDragStartSwimlane(e, item)}
-                                        onDragOver={!isEffectiveVerticalLayout ? handleDragOverSwimlane : undefined}
-                                        onDrop={() => !isEffectiveVerticalLayout && handleDropSwimlane(item)}
+                                        // onDragStart={(e) => !isEffectiveVerticalLayout && handleDragStartSwimlane(e, item)}
+                                        // onDragOver={!isEffectiveVerticalLayout ? handleDragOverSwimlane : undefined}
+                                        // onDrop={() => !isEffectiveVerticalLayout && handleDropSwimlane(item)}
                                         className={`transition-opacity duration-200 ${draggedSwimlane === item ? 'opacity-30' : 'opacity-100'} ${isEffectiveVerticalLayout ? 'w-full' : 'flex-shrink-0 w-96'}`}
                                     >
                                         <TagColumn 
@@ -1756,12 +1712,12 @@
 
 
         const headerContent = (
-            <>
-                <span className="truncate">{displayTitleText} ({tasks.length})</span>
+            <div className="flex items-center justify-between w-full">
+                <span className="truncate flex-grow">{displayTitleText} ({tasks.length})</span>
                 {isVerticalLayout && ( // Only show chevron in vertical mode
-                    <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                    <ChevronDownIcon className={`transform transition-transform duration-200 flex-shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
                 )}
-            </>
+            </div>
         );
         
         const handleQuickAddTask = (titleFromInput) => {
@@ -1824,8 +1780,8 @@
                 )}
                 <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
                     ${isVerticalLayout ? 
-                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'opacity-100 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4') :
-                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4'
+                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'max-h-full opacity-100 flex flex-col space-y-4') :
+                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4' // Horizontal view remains the same
                     }
                 `}>
                     {(!isVerticalLayout || !isCollapsed) && tasks.map((task) => (
@@ -1844,10 +1800,10 @@
         const dragStyle = isBeingDragged ? 'border-dashed border-sky-500' : 'border-indigo-800/50';
 
         const headerContent = (
-            <>
-                <span className="truncate">{tag} ({tasks.length})</span>
-                {isVerticalLayout && <ChevronDownIcon className={`transform transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />} {/* Chevron only in vertical layout */}
-            </>
+            <div className="flex items-center justify-between w-full">
+                <span className="truncate flex-grow">{tag} ({tasks.length})</span>
+                {isVerticalLayout && <ChevronDownIcon className={`transform transition-transform duration-200 flex-shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />}
+            </div>
         );
 
         const handleQuickAddTask = (titleFromInput) => {
@@ -1904,8 +1860,8 @@
                 )}
                 <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
                     ${isVerticalLayout ?
-                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'opacity-100 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4') :
-                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4'
+                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'max-h-full opacity-100 flex flex-col space-y-4') :
+                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4' // Horizontal view remains the same
                     }
                 `}>
                     {(!isVerticalLayout || !isCollapsed) && tasks.map(task => ( 
@@ -2110,12 +2066,12 @@
     );
     const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><Tooltip text="Keep task active"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm completion"><button onClick={onConfirm} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></Tooltip></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
-    const SettingsModal = ({ settings, onSettingsChange, onClose, onShowSwimlaneModal }) => { 
+    const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         const handleAnimationSettingChange = (key, value) => onSettingsChange(p => ({ ...p, animationSettings: { ...p.animationSettings, [key]: value } }));
         return ( 
             <Modal onClose={onClose}>
-                <ModalContent title="Settings" onClose={onClose} headerActions={<button onClick={onShowSwimlaneModal} className="text-sm text-indigo-300 hover:text-white bg-indigo-600/50 px-3 py-1 rounded-md">Manage Swimlanes</button>}>
+                <ModalContent title="Settings" onClose={onClose}>
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <label className="text-slate-300">Confirm on Delete</label>
@@ -2133,12 +2089,6 @@
                             <label className="text-slate-300">Auto-collapse Empty Columns</label>
                             <Tooltip text={settings.autoCollapse ? "Disable auto-collapse" : "Enable auto-collapse"}>
                                 <button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </Tooltip>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-slate-300">Stack Columns Vertically</label>
-                            <Tooltip text={settings.verticalLayout ? "Switch to horizontal layout" : "Switch to vertical layout"}>
-                                <button onClick={() => handleToggle('verticalLayout')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.verticalLayout ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.verticalLayout ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                             </Tooltip>
                         </div>
                         <div className="flex items-center justify-between">
@@ -2202,46 +2152,6 @@
             <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion of all completed tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></Tooltip></div></div>
         </Modal>
     );
-
-    const ManageSwimlanesModal = ({ allTags, activeSwimlanes, setSwimlanes, onClose }) => {
-        const handleToggle = (tag) => {
-            setSwimlanes(prev =>
-                prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-            );
-        };
-        // allTags from context is now already just custom tags, sorted.
-        const manageableTags = allTags; 
-
-        const doneButton = (
-            <Tooltip text="Close swimlane management">
-                <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm">Done</button>
-            </Tooltip>
-        );
-
-        return (
-            <Modal onClose={onClose}>
-                <ModalContent title="Manage Swimlanes" onClose={onClose} headerActions={doneButton}>
-                    <p className="text-sm text-slate-400 mb-4">Select custom tags to create dedicated swimlane columns. Priority-based columns are managed by task priority settings, not here.</p>
-                    <div className="space-y-2">
-                        {manageableTags.map(tag => (
-                            <div key={tag} className="flex items-center justify-between p-2 bg-slate-700/50 rounded-md">
-                                <label className="text-slate-300">{tag}</label>
-                                <Tooltip text={activeSwimlanes.includes(tag) ? `Disable swimlane for '${tag}'` : `Enable swimlane for '${tag}'`}>
-                                    <button onClick={() => handleToggle(tag)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${activeSwimlanes.includes(tag) ? 'bg-indigo-500' : 'bg-slate-600'}`}>
-                                        <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${activeSwimlanes.includes(tag) ? 'translate-x-6' : 'translate-x-1'}`} />
-                                    </button>
-                                </Tooltip>
-                            </div>
-                        ))}
-                        {manageableTags.length === 0 && (
-                            <p className="text-sm text-slate-500 italic">No custom tags found to create swimlanes from. Add custom tags to your tasks first.</p>
-                        )}
-                    </div>
-                    {/* "Done" button is now in the header via headerActions */}
-                </ModalContent>
-            </Modal>
-        );
-    };
 
     const SummaryModal = ({ summary, onClose }) => {
         const [copyButtonText, setCopyButtonText] = useState('Copy to Clipboard');
