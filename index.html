@@ -236,8 +236,7 @@
             
             const defaultSettings = {
                 confirmOnDelete: true,
-                showTooltips: true,
-                autoCollapse: true,
+                autoCollapse: true, // compactView removed
                 animationSettings: { enabled: true, particleCount: 250, connectionDistance: 170, particleSpeed: 0.5 }
             };
 
@@ -490,11 +489,9 @@
         return (
             <div className="flex flex-row items-baseline space-x-2 text-slate-300">
                 <span className="text-2xl md:text-4xl font-mono tracking-wider">{formattedTime}</span>
-                <Tooltip text="Click to change timezone">
-                    <button onClick={onTimezoneChange} className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors">
-                        {timezone}
-                    </button>
-                </Tooltip>
+                <button onClick={onTimezoneChange} title="Click to change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors">
+                    {timezone}
+                </button>
             </div>
         );
     });
@@ -665,32 +662,15 @@
                     </span>
                 )}
 
-                <Tooltip text="Delete item">
-                    <button onClick={() => onDelete(item.id)} disabled={isLocked} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:hidden">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </Tooltip>
+                <button onClick={() => onDelete(item.id)} title="Delete item" disabled={isLocked} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
             </li>
         );
     });
 
-    const Tooltip = ({ text, children }) => {
-        const { settings } = useAppContext();
-        
-        if (!settings.showTooltips) {
-            return <div className="relative group flex items-center">{children}</div>;
-        }
-        
-        return (
-            <div className="relative group flex items-center">
-                {children}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap bg-slate-700 text-white text-xs font-mono rounded-md py-1 px-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">{text}</div>
-            </div>
-        );
-    };
-
     // --- Task Card Component ---
-    const TaskCard = ({ task, clockTimezone, isCompact }) => { // Added clockTimezone and isCompact props
+    const TaskCard = ({ task, clockTimezone }) => {
         const { updateTask, deleteTask, allTags, settings, setTaskToDelete, setTaskToComplete, activeTags } = useAppContext();
         const now = useNow();
         const isLocked = task.status === TASK_STATUS.DONE;
@@ -859,10 +839,10 @@
         // regardless of whether the notification itself has fired.
         const reminderIsDue = task.reminderAt && new Date(task.reminderAt) <= now;
         const pulseClass = reminderIsDue ? (PRIORITY_CONFIG[task.priority]?.pulseClass || '') : '';
-
-        const cardPadding = isCompact ? 'p-2' : 'p-3';
-        const titleFontSize = isCompact ? 'text-base' : ''; // Default is text-lg from h3
-        const textSize = isCompact ? 'text-xs' : 'text-sm';
+        
+        const cardPadding = 'p-3';
+        const titleFontSize = ''; // Default is text-lg from h3
+        const textSize = 'text-sm';
 
         return (
             <div className={`w-full min-w-0 bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-lg shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''}`}>
@@ -872,9 +852,7 @@
                         {isEditingTitle ? (
                             <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className={`flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500 ${titleFontSize}`} />
                         ) : (
-                            <Tooltip text={isLocked ? "Task is completed" : "Double-click to edit title"}>
-                                <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} className={`font-bold text-slate-100 flex-grow min-w-0 break-words ${isLocked ? 'cursor-default' : 'cursor-pointer'} ${titleFontSize}`}>{task.title}</h3>
-                            </Tooltip>
+                            <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-bold text-slate-100 flex-grow min-w-0 break-words ${isLocked ? 'cursor-default' : 'cursor-pointer'} ${titleFontSize}`}>{task.title}</h3>
                         )}
                     </div>
 
@@ -894,9 +872,7 @@
                             onDragEndItem={handleDragEndChecklistItem}
                         />
                     )}</ul>
-                    <Tooltip text="Add a new checklist item">
-                        <button onClick={handleAddItem} disabled={isLocked} className={`w-full text-left text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:bg-transparent ${textSize}`}>+ Add item</button>
-                    </Tooltip>
+                    <button onClick={handleAddItem} title="Add a new checklist item" disabled={isLocked} className={`w-full text-left text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:bg-transparent ${textSize}`}>+ Add item</button>
 
                     {/* --- Notes Section --- */}
                     <div className="mt-2 pt-2 border-t border-slate-700/50">
@@ -904,9 +880,7 @@
                             <>
                                 <div className="flex justify-between items-center mb-1">
                                     <label htmlFor={`notes-${task.id}`} className="block text-xs text-slate-400">Notes:</label>
-                                    <Tooltip text="Collapse notes section">
-                                        <button onClick={() => setIsNotesExpanded(false)} className={`text-sky-400 hover:text-sky-300 ${textSize}`}>Collapse</button>
-                                    </Tooltip>
+                                    <button onClick={() => setIsNotesExpanded(false)} title="Collapse notes section" className={`text-sky-400 hover:text-sky-300 ${textSize}`}>Collapse</button>
                                 </div>
                                 <textarea
                                     ref={notesTextareaRef}
@@ -927,7 +901,7 @@
                                 ) : (
                                     <p className={`${textSize} text-slate-500 italic`}>No notes for this task.</p>
                                 )}
-                                <Tooltip text={notes ? 'View or edit notes' : 'Add notes'}><button onClick={() => setIsNotesExpanded(true)} disabled={isLocked} className={`${textSize} text-sky-400 hover:text-sky-300 flex-shrink-0 disabled:text-slate-500 disabled:cursor-not-allowed`}>{notes ? 'View/Edit' : 'Add Note'}</button></Tooltip>
+                                <button onClick={() => setIsNotesExpanded(true)} title={notes ? 'View or edit notes' : 'Add notes'} disabled={isLocked} className={`${textSize} text-sky-400 hover:text-sky-300 flex-shrink-0 disabled:text-slate-500 disabled:cursor-not-allowed`}>{notes ? 'View/Edit' : 'Add Note'}</button>
                             </div>
                         )}
                     </div>
@@ -935,21 +909,17 @@
                     <div className="mt-2 pt-2 border-t border-slate-700/50">
                         <div className="flex flex-wrap items-center gap-1 mb-2">
                             <span className="text-xs text-slate-400">Priority:</span> {/* Removed mr-2, gap will handle spacing */}
-                            {DISPLAY_PRIORITY_ORDER.map(pTag => ( /* Use DISPLAY_PRIORITY_ORDER for consistent button order */
-                                <Tooltip key={pTag} text={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}>
-                                    <button 
-                                        onClick={() => handleSetPriority(pTag)}
-                                        disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`} /* Removed mr-1 mb-1, added flex-shrink-0 */
-                                    >
-                                        {PRIORITY_CONFIG[pTag].title}
-                                    </button>
-                                </Tooltip>
-                            ))}
-                            <Tooltip text="Clear priority (Unprioritized)">
-                                <button onClick={() => handleSetPriority(null)} disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
-                                    Clear
+                            {DISPLAY_PRIORITY_ORDER.map(pTag => ( /* Use DISPLAY_PRIORITY_ORDER for consistent button order */                                <button 
+                                    key={pTag} title={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}
+                                    onClick={() => handleSetPriority(pTag)}
+                                    disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`} /* Removed mr-1 mb-1, added flex-shrink-0 */
+                                >
+                                    {PRIORITY_CONFIG[pTag].title}
                                 </button>
-                            </Tooltip>
+                            ))}
+                            <button onClick={() => handleSetPriority(null)} title="Clear priority (Unprioritized)" disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
+                                Clear
+                            </button>
                         </div>
                         </div>
                     <div className="mt-2 pt-2 border-t border-slate-700/50"> {/* This is the start of the custom tags section, unchanged by this request */}
@@ -957,9 +927,7 @@
                             {(task.tags || []).filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).map(tag => (
                                 <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
                                     {tag}
-                                    <Tooltip text={`Remove tag: ${tag}`}>
-                                        <button onClick={() => handleRemoveTag(tag)} disabled={isLocked} className="ml-2 text-slate-400 hover:text-white leading-none disabled:hidden">&times;</button>
-                                    </Tooltip>
+                                    <button onClick={() => handleRemoveTag(tag)} title={`Remove tag: ${tag}`} disabled={isLocked} className="ml-2 text-slate-400 hover:text-white leading-none disabled:hidden">&times;</button>
                                 </span>
                             ))}
                         </div>
@@ -975,9 +943,7 @@
                             <datalist id="tag-suggestions">
                                 {allTags.map(tag => <option key={tag} value={tag} />)}
                             </datalist>
-                            <Tooltip text="Add this tag to the task">
-                                <button onClick={handleAddTag} disabled={isLocked} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Add</button> {/* Adjusted py-1 for consistency */}
-                            </Tooltip>
+                            <button onClick={handleAddTag} title="Add this tag to the task" disabled={isLocked} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Add</button> {/* Adjusted py-1 for consistency */}
                         </div>
                         {tagError && <div className="mt-1.5 text-xs text-red-400">{tagError}</div>}
                     </div>
@@ -991,9 +957,7 @@
                                 onKeyDown={handleReminderKeyDown}
                                 autoFocus 
                                 placeholder="Set in: MM:SS / SS"                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 flex-1 min-w-0"/>
-                            <Tooltip text="Set reminder from input">
-                                <button onClick={handleSetReminder} className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
-                            </Tooltip>
+                            <button onClick={handleSetReminder} title="Set reminder from input" className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
                         </div>
                     )}
                     {task.reminderAt && !isSettingReminder && (
@@ -1005,9 +969,7 @@
                                         hour: '2-digit', minute:'2-digit', second: '2-digit'
                                     })} {clockTimezone}
                                 </span>
-                                <Tooltip text="Clear reminder">
-                                    <button onClick={() => updateTask(task.id, { reminderAt: null, reminderFired: false })} className="text-red-400 hover:text-red-300 text-xs">(clear)</button>
-                                </Tooltip>
+                                <button onClick={() => updateTask(task.id, { reminderAt: null, reminderFired: false })} title="Clear reminder" className="text-red-400 hover:text-red-300 text-xs">(clear)</button>
                             </div>
                             <ReminderCountdown reminderAt={task.reminderAt} />
                         </div>
@@ -1040,10 +1002,8 @@
                             )}
                         </div>
                         <div className="flex items-center space-x-2">
-                            <Tooltip text={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"}>
-                                <button onClick={() => setIsSettingReminder(!isSettingReminder)} disabled={task.status === TASK_STATUS.DONE} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
-                            </Tooltip>
-                            <Tooltip text="Delete Permanently"><button onClick={handleDeleteRequest} className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button></Tooltip>
+                            <button onClick={() => setIsSettingReminder(!isSettingReminder)} title={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"} disabled={task.status === TASK_STATUS.DONE} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
+                            <button onClick={handleDeleteRequest} title="Delete Permanently" className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button>
                         </div>
                     </div>
                 </div>
@@ -1098,6 +1058,29 @@
         const windowWidth = useWindowWidth();
         const prevTasks = usePrevious(currentTasks);
 
+        // --- Layout Calculation based on ACTIVE view content ---
+        // This logic needs to be based on the active tasks, regardless of the current view,
+        // to ensure the layout mode is consistent when switching between Active and Completed.
+        const activeViewLayoutInfo = useMemo(() => {
+            const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE);
+            const swimlanesWithTasks = new Set();
+            activeTasks.forEach(task => {
+                if (task.priority) swimlanesWithTasks.add(PRIORITY_CONFIG[task.priority].title);
+                (task.tags || []).forEach(tag => swimlanesWithTasks.add(tag));
+            });
+            const activeViewSwimlanes = Array.from(swimlanesWithTasks);
+            
+            const unclassifiedActiveTasks = activeTasks.filter(task => {
+                if (task.priority && swimlanesWithTasks.has(PRIORITY_CONFIG[task.priority].title)) return false;
+                if (task.tags && task.tags.some(tag => swimlanesWithTasks.has(tag))) return false;
+                return true;
+            });
+
+            return {
+                swimlanes: activeViewSwimlanes,
+                hasUnclassified: unclassifiedActiveTasks.length > 0
+            };
+        }, [tasks]); // Depends only on the full task list
         // --- Effect for showing release notes once per version ---
         useEffect(() => {
             const lastSeenVersion = localStorage.getItem('taiko-app-local-lastSeenVersion');
@@ -1417,20 +1400,14 @@
             if (mainContainerRef.current && windowWidth >= 768) {
                 const containerWidth = mainContainerRef.current.clientWidth;
                 
-                // Determine how many columns would be rendered
+                // Determine how many columns would be rendered in the ACTIVE view
                 let columnCount = 0;
-                const shouldRenderUnsorted = unclassifiedTasks.length > 0 || (activeTags.length === 0 && activeSwimlanes.length === 0);
-                if (shouldRenderUnsorted) {
+                // The "Unsorted" column appears if there are unclassified tasks, or if no filters are active.
+                if (activeViewLayoutInfo.hasUnclassified || (activeTags.length === 0 && activeViewLayoutInfo.swimlanes.length === 0)) {
                     columnCount++;
                 }
-
-                const renderedSwimlanesCount = activeSwimlanes.filter(item => {
-                    const tasksForThisSwimlane = swimlaneTasks[item] || [];
-                    const isEffectivelyCollapsed = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : (collapsedTagSwimlanes[item] || false);
-                    return tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsed);
-                }).length;
-                columnCount += renderedSwimlanesCount;
-
+                // Add the count of swimlanes that will be rendered.
+                columnCount += activeViewLayoutInfo.swimlanes.length;
                 const columnWidth = 384; // w-96 is 24rem = 384px
                 const gapWidth = 16; // space-x-4 is 1rem = 16px
                 const totalRequiredWidth = (columnCount * columnWidth) + (Math.max(0, columnCount - 1) * gapWidth);
@@ -1439,10 +1416,20 @@
             } else {
                 setForceVertical(false); // Don't force vertical on small screens, it's already handled
             }
-        }, [activeSwimlanes, unclassifiedTasks, windowWidth, swimlaneTasks, activeTags, settings.autoCollapse, collapsedTagSwimlanes]); // Re-check when columns or window size change
-        const isEffectiveVerticalLayout = forceVertical || windowWidth < 768; // Force vertical on small screens or when content overflows
+        }, [activeViewLayoutInfo, windowWidth, activeTags]); // Re-check when active view content or window size change
+
+        // The layout mode is determined by the active view's state (forceVertical) or screen size.
+        // This single variable controls the layout for BOTH the active and completed views for consistency.
+        const isEffectiveVerticalLayout = forceVertical || windowWidth < 768;
         const mainLayoutClasses = isEffectiveVerticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4 items-start';
         const backgroundOverlayClass = showCompleted ? 'bg-green-900/10' : '';
+
+        // --- Effect to control animation based on layout ---
+        useEffect(() => {
+            // Dispatch an event to the global animation script when the layout changes
+            const event = new CustomEvent('layoutChange', { detail: { isVertical: isEffectiveVerticalLayout } });
+            window.dispatchEvent(event);
+        }, [isEffectiveVerticalLayout]);
         
         return (
             <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: 'transparent' }}>
@@ -1455,29 +1442,21 @@
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
                 {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
                 
-                <header className="sticky top-0 z-10 p-4 bg-slate-900/70 backdrop-blur-md shadow-lg flex flex-col space-y-3">
-                    {/* --- Top Row: Title & Clock --- */}
-                    <div className="flex justify-between items-center w-full">
-                        <div className="flex items-center space-x-4">
-                            <TaikoLogo />
-                            <div>
-                                <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
-                            </div>
-                        </div>
-                        <div className="flex-shrink-0">
-                            <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
-                        </div>
-                    </div>
-                    {/* --- Bottom Row: Toolbar (now responsive) --- */}
-                    <div className="flex justify-between items-center w-full flex-wrap gap-2">
+                <header className="sticky top-0 z-10 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+                    {/* --- Left Side: Logo, Title, Toolbar --- */}
+                    <div className="flex items-center gap-4">
+                        <TaikoLogo />
+                        <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
                         <HeaderToolbar isSmallScreen={windowWidth < 768} onShowSettings={() => setShowSettings(true)} onGenerateSummary={generateCompletedTasksSummary} onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} showDeleteAllButton={showCompleted && completedTasksCount > 0} />
-                        <div className="flex items-center flex-wrap gap-2">
-                            <AddTaskButton onAddTask={() => setShowAddTaskModal(true)} />
-                        </div>
+                    </div>
+
+                    {/* --- Right Side: Add Task & Clock --- */}
+                    <div className="flex items-center">
+                        <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
                     </div>
                 </header>
                 
-                <div className="px-6 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
+                <div className="px-4 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-4">
                     <FilterToolbar
                         isSmallScreen={windowWidth < 768}
                         showCompleted={showCompleted}
@@ -1492,27 +1471,27 @@
                         onClearFilters={clearTagFilter}
                         onTagFilterClick={handleTagFilterClick}
                     />
+                    <HeaderQuickAdd onAddTask={(title) => addTask(title, null, [])} />
                 </div>
 
-                <main ref={mainContainerRef} className={`flex-grow p-4 pt-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass} ${!isEffectiveVerticalLayout ? 'overflow-x-auto' : 'overflow-y-auto'}`}>
+                <main ref={mainContainerRef} className={`flex-grow p-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass} ${!isEffectiveVerticalLayout ? 'overflow-x-auto' : 'overflow-y-auto'}`}>
                     {showCompleted ? (
                         <PriorityColumn
                             key="completed-column"
                             titleOverride="Completed Tasks"
                             priority={null}
                             tasks={tasksMatchingActiveFilters}
+                            allTasks={tasks}
                             isCollapsed={false}
-                            onToggleCollapse={() => {}} // No-op for completed view
+                            onToggleCollapse={() => {}} // No-op for completed view as it's not collapsible
                             showCompleted={showCompleted}
                             isVerticalLayout={isEffectiveVerticalLayout}
                             clockTimezone={clockTimezone}
                             isSwimlane={false}
-                            isCompact={settings.compactView}
-                            disableQuickAdd={true}
                         />
                     ) : (
                         <>
-                            {/* --- "New Tasks" Column (replaces Triage) --- */}
+                            {/* --- "Unsorted" Column --- */}
                             {(() => { // This column displays unclassifiedTasks
                                 const unsortedTasksToDisplay = unclassifiedTasks;
                                 const isEffectivelyCollapsedUnsorted = (settings.autoCollapse && unsortedTasksToDisplay.length === 0) ? true : (collapsedColumns['unsorted'] || false);
@@ -1524,16 +1503,16 @@
                                     return (
                                         <PriorityColumn
                                             key="unsorted-column"
-                                            titleOverride="Unsorted" // Updated title
+                                            titleOverride="Unsorted"
                                             priority={null} // Base styling on unprioritized, but title is overridden
                                             tasks={unsortedTasksToDisplay}
+                                            allTasks={tasks}
                                             isCollapsed={isEffectivelyCollapsedUnsorted}
                                             onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'unsorted': !p['unsorted'] }))}
                                             showCompleted={showCompleted}
                                             isVerticalLayout={isEffectiveVerticalLayout}
                                             clockTimezone={clockTimezone}
                                             isSwimlane={false} // Indicate this is a primary column
-                                            isCompact={settings.compactView}
                                         /> );
                                 } return null;
                             })()}
@@ -1569,7 +1548,6 @@
                                             onToggleCollapse={() => toggleSwimlaneCollapse(item)}
                                             isVerticalLayout={isEffectiveVerticalLayout}
                                             isBeingDragged={draggedSwimlane === item}
-                                            isCompact={settings.compactView}
                                         />
                                     </div>
                                 );
@@ -1612,26 +1590,20 @@
 
         const secondaryFilters = (
             <>
-                <Tooltip text="Show all tasks (clear tag filters)">
-                    <button onClick={onClearFilters} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>All <span className="opacity-80"> ({allTasksCount})</span></button>
-                </Tooltip>
+                <button onClick={onClearFilters} title="Show all tasks (clear tag filters)" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>All <span className="opacity-80"> ({allTasksCount})</span></button>
                 {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
                     const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
                     return (
-                        <Tooltip key={displayTitle} text={`Filter by priority: ${displayTitle}`}>
-                            <button onClick={() => onTagFilterClick(displayTitle)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
-                            </button>
-                        </Tooltip>
+                        <button key={displayTitle} title={`Filter by priority: ${displayTitle}`} onClick={() => onTagFilterClick(displayTitle)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                            {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
+                        </button>
                     );
                 })}
                 {tagsForCurrentView.length > 0 && <div className="border-l border-slate-700 h-5"></div>}
                 {tagsForCurrentView.map(tag => (
-                    <Tooltip key={tag} text={`Filter by custom tag: ${tag}`}>
-                        <button onClick={() => onTagFilterClick(tag)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                            {tag} <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>
-                        </button>
-                    </Tooltip>
+                    <button key={tag} title={`Filter by custom tag: ${tag}`} onClick={() => onTagFilterClick(tag)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                        {tag} <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>
+                    </button>
                 ))}
             </>
         );
@@ -1641,18 +1613,16 @@
         return (
             <div className="flex items-center space-x-2 flex-wrap">
                 {/* --- Primary View Tabs (Always Visible) --- */}
-                <Tooltip text="Show active tasks"><button onClick={() => onViewChange(false)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Active <span className="opacity-80">({activeTasksCount})</span></button></Tooltip>
-                <Tooltip text="Show completed tasks"><button onClick={() => onViewChange(true)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${showCompleted ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Completed <span className="opacity-80">({completedTasksCount})</span></button></Tooltip>
+                <button onClick={() => onViewChange(false)} title="Show active tasks" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Active <span className="opacity-80">({activeTasksCount})</span></button>
+                <button onClick={() => onViewChange(true)} title="Show completed tasks" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${showCompleted ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Completed <span className="opacity-80">({completedTasksCount})</span></button>
                 <div className="border-l border-slate-700 h-5 mx-2"></div>
 
                 {isSmallScreen ? (
                     <div className="relative" ref={filterMenuRef}>
-                        <Tooltip text="Select a filter">
-                            <button onClick={() => setIsFilterMenuOpen(p => !p)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${activeTags.length > 0 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                                {mobileFilterButtonText}
-                                <ChevronDownIcon className={`h-4 w-4 transition-transform ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
-                            </button>
-                        </Tooltip>
+                        <button onClick={() => setIsFilterMenuOpen(p => !p)} title="Select a filter" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${activeTags.length > 0 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                            {mobileFilterButtonText}
+                            <ChevronDownIcon className={`h-4 w-4 transition-transform ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
                         {isFilterMenuOpen && (
                             <div className="absolute left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-md shadow-lg py-1 z-20">
                                 <button onClick={() => { onClearFilters(); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.length === 0 ? 'text-white bg-sky-600' : 'text-slate-200 hover:bg-slate-700'}`}>All ({allTasksCount})</button>
@@ -1703,11 +1673,9 @@
         if (isSmallScreen) {
             return (
                 <div className="relative" ref={menuRef}>
-                    <Tooltip text="More options">
-                        <button onClick={() => setIsMenuOpen(prev => !prev)} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
-                        </button>
-                    </Tooltip>
+                    <button onClick={() => setIsMenuOpen(prev => !prev)} title="More options" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+                    </button>
                     {isMenuOpen && (
                         <div className="absolute left-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-md shadow-lg py-1 z-20">
                             {menuItems}
@@ -1719,14 +1687,14 @@
 
         return (
             <div className="flex items-center flex-wrap gap-2">
-                <Tooltip text="Settings"><button onClick={onShowSettings} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button></Tooltip>
-                <Tooltip text="Report Issue or Submit Feedback"><a href="https://github.com/closedloopchaos/taiko/issues/new/choose" target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><BugIcon /></a></Tooltip>
-                <Tooltip text="Generate Summary of Completed Tasks"><button onClick={onGenerateSummary} className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><DocumentTextIcon /></button></Tooltip>
-                {showDeleteAllButton && <Tooltip text="Delete All Completed Tasks"><button onClick={onShowDeleteAllModal} className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors"><DeleteIcon /></button></Tooltip>}
+                <button onClick={onShowSettings} title="Settings" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
+                <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" title="Report Issue or Submit Feedback" target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><BugIcon /></a>
+                <button onClick={onGenerateSummary} title="Generate Summary of Completed Tasks" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><DocumentTextIcon /></button>
+                {showDeleteAllButton && <button onClick={onShowDeleteAllModal} title="Delete All Completed Tasks" className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors"><DeleteIcon /></button>}
             </div>
         );
     });
-    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showCompleted, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null, disableQuickAdd = false, isCompact }) => {
+    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showCompleted, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null }) => {
         const { addTask } = useAppContext();
         const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
@@ -1750,63 +1718,21 @@
             </div>
         );
         
-        const handleQuickAddTask = (titleFromInput) => {
-            if (!titleFromInput.trim()) { setShowQuickAdd(false); return; }
-
-            let taskPriorityToAdd = null;
-            let taskTagsToAdd = []; // Default for "Unsorted" or priority columns
-
-            if (titleOverride) { // "New Tasks" column
-                taskPriorityToAdd = null;
-                taskTagsToAdd = [];
-            } else if (priority) { // Priority swimlane
-                taskPriorityToAdd = priority; // The actual priority constant like PRIORITIES.LOW
-                taskTagsToAdd = []; // DO NOT add the priority display title to tags array
-            }
-            
-            addTask(titleFromInput.trim(), taskPriorityToAdd, taskTagsToAdd);
-            setShowQuickAdd(false);
-        };
-
 
         return (
             <div className={`flex flex-col rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
-                    <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
-                        <button 
-                            onClick={onToggleCollapse} 
-                            className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70 hover:bg-slate-700/70' : (titleOverride ? 'bg-slate-700/60 hover:bg-slate-600/60' : 'hover:bg-slate-700/50')} flex-shrink-0 transition-colors`}
-                        >
-                            <div className="flex-grow min-w-0">{headerContent}</div>
-                            {!isCollapsed && !showQuickAdd && !disableQuickAdd && (
-                                <Tooltip text={`Quick add to ${displayTitleText}`}>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setShowQuickAdd(true); }} 
-                                        className="ml-2 p-1 rounded-full hover:bg-slate-600/50 flex-shrink-0"
-                                    >
-                                        <PlusIcon />
-                                    </button>
-                                </Tooltip>
-                            )}
-                        </button>
-                    </Tooltip>
+                    <button 
+                        onClick={onToggleCollapse} 
+                        title={isCollapsed ? "Expand column" : "Collapse column"}
+                        className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70 hover:bg-slate-700/70' : (titleOverride ? 'bg-slate-700/60 hover:bg-slate-600/60' : 'hover:bg-slate-700/50')} flex-shrink-0 transition-colors`}
+                    >
+                        <div className="flex-grow min-w-0">{headerContent}</div>
+                    </button>
                 ) : ( // Static header for horizontal layout
                     <div className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70' : (titleOverride ? 'bg-slate-700/60' : 'bg-slate-900/60')} flex-shrink-0`}>
                         <div className="flex-grow min-w-0">{headerContent}</div>
-                        {!showQuickAdd && !disableQuickAdd && (
-                             <Tooltip text={`Quick add to ${displayTitleText}`}>
-                                <button 
-                                    onClick={() => setShowQuickAdd(true)} 
-                                    className="ml-2 p-1 rounded-full hover:bg-slate-600/50 flex-shrink-0"
-                                >
-                                    <PlusIcon />
-                                </button>
-                            </Tooltip>
-                        )}
                     </div>
-                )}
-                {showQuickAdd && !isCollapsed && (
-                    <QuickAddInputForm onAdd={handleQuickAddTask} onCancel={() => setShowQuickAdd(false)} />
                 )}
                 <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
                     ${isVerticalLayout ? 
@@ -1815,14 +1741,15 @@
                     }
                 `}>
                     {(!isVerticalLayout || !isCollapsed) && tasks.map((task) => (
-                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} isCompact={isCompact} />
+                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />
                     ))}
                 </div>
             </div>
         );
     });
 
-    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout, isBeingDragged, isCompact }) => {
+    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout, isBeingDragged }) => {
+        const { settings } = useAppContext();
         const { addTask } = useAppContext();
         const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
 
@@ -1836,57 +1763,20 @@
             </div>
         );
 
-        const handleQuickAddTask = (titleFromInput) => {
-            if (!titleFromInput.trim()) { setShowQuickAdd(false); return; }
-
-            const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
-
-            if (priorityConstant) {
-                addTask(titleFromInput.trim(), priorityConstant, []); // Set priority, no tags
-            } else {
-                addTask(titleFromInput.trim(), null, [tag]); // Null priority, add custom tag
-            }
-            setShowQuickAdd(false);
-        };
-
         return (
             <div className={`flex flex-col overflow-x-hidden bg-indigo-900/20 backdrop-blur-sm border rounded-lg ${columnLayoutClasses} ${dragStyle} transition-all`}>
                 {isVerticalLayout ? ( // Clickable header for vertical layout
-                    <Tooltip text={isCollapsed ? "Expand column" : "Collapse column"}>
-                        <button
-                            onClick={onToggleCollapse}
-                            className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors ${isBeingDragged ? 'cursor-grabbing' : 'cursor-pointer'}`}
-                        >
-                            <div className="flex-grow min-w-0">{headerContent}</div>
-                            {!isCollapsed && !showQuickAdd && (
-                                <Tooltip text={`Quick add to ${tag}`}>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setShowQuickAdd(true); }} 
-                                        className="ml-2 p-1 rounded-full hover:bg-slate-800/50 flex-shrink-0"
-                                    >
-                                        <PlusIcon />
-                                    </button>
-                                </Tooltip>
-                            )}
-                        </button>
-                    </Tooltip>
+                    <button
+                        onClick={onToggleCollapse}
+                        title={isCollapsed ? "Expand column" : "Collapse column"}
+                        className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors ${isBeingDragged ? 'cursor-grabbing' : 'cursor-pointer'}`}
+                    >
+                        <div className="flex-grow min-w-0">{headerContent}</div>
+                    </button>
                 ) : (
                     <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0 ${isBeingDragged ? 'cursor-grabbing' : 'cursor-grab'}`}>
                         <div className="flex-grow min-w-0">{headerContent}</div>
-                         {!showQuickAdd && (
-                            <Tooltip text={`Quick add to ${tag}`}>
-                                <button 
-                                    onClick={() => setShowQuickAdd(true)} 
-                                    className="ml-2 p-1 rounded-full hover:bg-slate-800/50 flex-shrink-0"
-                                >
-                                    <PlusIcon />
-                                </button>
-                            </Tooltip>
-                        )}
                     </div>
-                )}
-                {showQuickAdd && !isCollapsed && (
-                    <QuickAddInputForm onAdd={handleQuickAddTask} onCancel={() => setShowQuickAdd(false)} />
                 )}
                 <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
                     ${isVerticalLayout ?
@@ -1895,7 +1785,7 @@
                     }
                 `}>
                     {(!isVerticalLayout || !isCollapsed) && tasks.map(task => ( 
-                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} isCompact={isCompact} />
+                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />
                     ))}
                 </div>
             </div>
@@ -1962,17 +1852,59 @@
         );
     });
 
+    const HeaderQuickAdd = ({ onAddTask }) => {
+        const [isAdding, setIsAdding] = useState(false);
+        const [title, setTitle] = useState('');
+        const inputRef = useRef(null);
+
+        useEffect(() => {
+            if (isAdding && inputRef.current) {
+                inputRef.current.focus();
+            }
+        }, [isAdding]);
+
+        const handleAdd = () => {
+            if (title.trim()) {
+                onAddTask(title.trim());
+            }
+            setTitle('');
+            setIsAdding(false);
+        };
+
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter') handleAdd();
+            if (e.key === 'Escape') setIsAdding(false);
+        };
+
+        return (
+            <div className="relative flex-grow max-w-[10rem]">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleAdd}
+                    placeholder="Quick add..."
+                    className="w-full bg-slate-700/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 placeholder-slate-400 hover:bg-slate-700 transition-colors"
+                />
+            </div>
+        );
+    };
+
     const AddTaskButton = React.memo(({ onAddTask }) => {
+        const windowWidth = useWindowWidth();
+        const isSmall = windowWidth < 768;
+
         return (
             <div className="relative">
-                <Tooltip text="Add a new task">
-                    <button 
-                        onClick={onAddTask} 
-                        className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all"
-                    >
-                        + Add Task
-                    </button>
-                </Tooltip>
+                <button 
+                    onClick={onAddTask}
+                    title="Add a new task (A)"
+                    className="px-3 py-1.5 bg-sky-500/20 border border-sky-500/80 text-sky-200 text-sm font-semibold rounded-lg shadow-md hover:bg-sky-500/40 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 transition-all flex items-center gap-2"
+                >
+                    <PlusIcon /> {!isSmall && 'Add Task'}
+                </button>
             </div>
         );
     });
@@ -2025,15 +1957,13 @@
                         <div className="pt-2 border-t border-slate-700/50">
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm text-slate-400">Priority:</span>
-                                {DISPLAY_PRIORITY_ORDER.map(pConst => (
-                                    <Tooltip key={pConst} text={`Set priority to ${PRIORITY_CONFIG[pConst].title}`}>
-                                        <button 
-                                            onClick={() => setPriority(pConst === priority ? null : pConst)}
-                                            className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${priority === pConst ? `${PRIORITY_CONFIG[pConst].bgColor} ${PRIORITY_CONFIG[pConst].borderColor} ${PRIORITY_CONFIG[pConst].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pConst].bgColor}`}`}
-                                        >
-                                            {PRIORITY_CONFIG[pConst].title}
-                                        </button>
-                                    </Tooltip>
+                                {DISPLAY_PRIORITY_ORDER.map(pConst => (                                    <button 
+                                        key={pConst} title={`Set priority to ${PRIORITY_CONFIG[pConst].title}`}
+                                        onClick={() => setPriority(pConst === priority ? null : pConst)}
+                                        className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${priority === pConst ? `${PRIORITY_CONFIG[pConst].bgColor} ${PRIORITY_CONFIG[pConst].borderColor} ${PRIORITY_CONFIG[pConst].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pConst].bgColor}`}`}
+                                    >
+                                        {PRIORITY_CONFIG[pConst].title}
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -2045,9 +1975,7 @@
                                 {tags.map(tag => (
                                     <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
                                         {tag}
-                                        <Tooltip text={`Remove tag: ${tag}`}>
-                                            <button onClick={() => handleRemoveTag(tag)} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
-                                        </Tooltip>
+                                        <button onClick={() => handleRemoveTag(tag)} title={`Remove tag: ${tag}`} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
                                     </span>
                                 ))}
                             </div>
@@ -2064,9 +1992,7 @@
                                 <datalist id="tag-suggestions-modal">
                                     {allTags.map(tag => <option key={tag} value={tag} />)}
                                 </datalist>
-                                <Tooltip text="Add this tag">
-                                    <button onClick={handleAddTag} className="ml-2 text-sm bg-sky-600 text-white px-4 py-1 rounded-md hover:bg-sky-500">Add</button>
-                                </Tooltip>
+                                <button onClick={handleAddTag} title="Add this tag" className="ml-2 text-sm bg-sky-600 text-white px-4 py-1 rounded-md hover:bg-sky-500">Add</button>
                             </div>
                         </div>
 
@@ -2094,8 +2020,8 @@
             <div className="p-4 overflow-y-auto">{children}</div>
         </div>
     );
-    const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><Tooltip text="Keep task active"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm completion"><button onClick={onConfirm} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></Tooltip></div></div></Modal>;
-    const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></Tooltip></div></div></Modal>;
+    const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Keep task active" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm completion" className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></div></div></Modal>;
+    const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm permanent deletion" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         const handleAnimationSettingChange = (key, value) => onSettingsChange(p => ({ ...p, animationSettings: { ...p.animationSettings, [key]: value } }));
@@ -2105,35 +2031,17 @@
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <label className="text-slate-300">Confirm on Delete</label>
-                            <Tooltip text={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"}>
-                                <button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </Tooltip>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-slate-300">Show Tooltips</label>
-                            <Tooltip text={settings.showTooltips ? "Disable Tooltips" : "Enable Tooltips"}>
-                                <button onClick={() => handleToggle('showTooltips')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.showTooltips ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.showTooltips ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </Tooltip>
+                            <button onClick={() => handleToggle('confirmOnDelete')} title={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                         </div>
                         <div className="flex items-center justify-between">
                             <label className="text-slate-300">Auto-collapse Empty Columns</label>
-                            <Tooltip text={settings.autoCollapse ? "Disable auto-collapse" : "Enable auto-collapse"}>
-                                <button onClick={() => handleToggle('autoCollapse')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </Tooltip>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-slate-300">Compact View</label>
-                            <Tooltip text={settings.compactView ? "Switch to default view" : "Switch to compact view"}>
-                                <button onClick={() => handleToggle('compactView')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.compactView ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.compactView ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </Tooltip>
+                            <button onClick={() => handleToggle('autoCollapse')} title={settings.autoCollapse ? "Disable auto-collapse" : "Enable auto-collapse"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                         </div>
                         <div className="pt-4 border-t border-slate-700/50 space-y-4">
                             <h4 className="text-lg font-semibold text-slate-200">Background Animation</h4>
                             <div className="flex items-center justify-between">
                                 <label className="text-slate-300">Enable Animation</label>
-                                <Tooltip text={settings.animationSettings.enabled ? "Disable background animation" : "Enable background animation"}>
-                                    <button onClick={() => handleAnimationSettingChange('enabled', !settings.animationSettings.enabled)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                                </Tooltip>
+                                <button onClick={() => handleAnimationSettingChange('enabled', !settings.animationSettings.enabled)} title={settings.animationSettings.enabled ? "Disable background animation" : "Enable background animation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                             </div>
                             <div className="flex flex-col space-y-2">
                                 <label htmlFor="particleCount" className="text-slate-300 flex justify-between">
@@ -2179,7 +2087,7 @@
     };
     const DeleteAllCompletedModal = ({ onConfirm, onCancel, count }) => (
         <Modal onClose={onCancel}>
-            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><Tooltip text="Cancel deletion"><button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button></Tooltip><Tooltip text="Confirm permanent deletion of all completed tasks"><button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></Tooltip></div></div>
+            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete All Completed Tasks?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete all {count} completed tasks? This action cannot be undone.</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm permanent deletion of all completed tasks" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete All</button></div></div>
         </Modal>
     );
 
@@ -2211,12 +2119,8 @@
                     <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
                         <h3 className="text-xl font-bold">Completed Tasks Summary</h3>
                         <div className="flex items-center space-x-2">
-                            <Tooltip text="Copy summary to your clipboard">
-                                <button onClick={handleCopy} className="px-3 py-1 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm transition-all duration-150 w-36 text-center">{copyButtonText}</button>
-                            </Tooltip>
-                            <Tooltip text="Close this summary">
-                                <button onClick={onClose} className="px-4 py-1 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Done</button>
-                            </Tooltip>
+                            <button onClick={handleCopy} title="Copy summary to your clipboard" className="px-3 py-1 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm transition-all duration-150 w-36 text-center">{copyButtonText}</button>
+                            <button onClick={onClose} title="Close this summary" className="px-4 py-1 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Done</button>
                         </div>
                     </div>
                     <div className="p-4 overflow-y-auto"><pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-4 rounded-md border border-slate-700">{summary}</pre></div>
@@ -2233,9 +2137,7 @@
                 <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
                         <h3 className="text-xl font-bold">{releaseInfo.title}</h3>
-                        <Tooltip text="Close Release Notes">
-                            <button onClick={onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm">Got it!</button>
-                        </Tooltip>
+                        <button onClick={onClose} title="Close Release Notes" className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm">Got it!</button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-4">
                         {releaseInfo.notes.map((note, index) => (
@@ -2284,20 +2186,19 @@
         let particles = [];
         const mouse = { x: null, y: null, radius: 150 };
         let animationFrameId;
+        let pulses = []; // Array to store active pulse waves
+
+        // --- Animation Control based on screen size ---
+        const isSmallScreen = () => window.innerWidth < 768;
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            // Use a smaller radius on mobile for a more subtle effect
-            mouse.radius = canvas.width < 768 ? (canvas.width / 15) + 20 : (canvas.width / 12) + 50;
-            // On resize, if animation is enabled, re-initialize to distribute particles evenly.
-            if (animSettings.enabled) {
-                init();
-            }
+            mouse.radius = isSmallScreen() ? (canvas.width / 15) + 20 : (canvas.width / 12) + 50; // Keep mouse radius update
         }
 
         window.addEventListener('resize', () => {
-            resizeCanvas(); // This will call init() if needed
+            resizeCanvas();
         });
 
         window.addEventListener('mousemove', (event) => {
@@ -2308,6 +2209,34 @@
         window.addEventListener('mouseout', () => {
             mouse.x = null;
             mouse.y = null;
+        });
+
+        // Listen for layout changes from React to control animation
+        window.addEventListener('layoutChange', (event) => {
+            const { isVertical } = event.detail;
+            if (isVertical) {
+                // If layout is vertical (collapsed columns), stop the animation.
+                if (animationFrameId) {
+                    stopAnimation();
+                }
+            } else {
+                // If layout is horizontal, restart the animation if it's not running and is enabled.
+                if (!animationFrameId && animSettings.enabled) {
+                    startAnimation();
+                }
+            }
+        });
+
+        // Listen for clicks to create a pulse
+        window.addEventListener('click', (event) => {
+            if (!animSettings.enabled) return;
+            pulses.push({
+                x: event.clientX,
+                y: event.clientY,
+                radius: 0,
+                maxRadius: Math.sqrt(canvas.width ** 2 + canvas.height ** 2), // Pulse expands to the full diagonal of the screen
+                speed: 8,
+            });
         });
 
         // Listen for settings changes from React
@@ -2373,6 +2302,20 @@
                     let distance = Math.sqrt(dx * dx + dy * dy);
                     this.currentColor = getColorFromDistance(distance, mouse.radius);
                 }
+
+                // Pulse interaction - overrides mouse color
+                for (let i = 0; i < pulses.length; i++) {
+                    const pulse = pulses[i];
+                    const dx = pulse.x - this.x;
+                    const dy = pulse.y - this.y;
+                    const distanceToPulseCenter = Math.sqrt(dx * dx + dy * dy);
+                    const pulseWidth = 60; // How thick the ripple wave is
+
+                    if (distanceToPulseCenter > pulse.radius - pulseWidth && distanceToPulseCenter < pulse.radius) {
+                        // The particle is inside the ripple band
+                        this.currentColor = `rgb(34, 197, 94)`; // A bright green color for the pulse
+                    }
+                }
             }
         }
 
@@ -2410,9 +2353,17 @@
         }
 
         function animate() {
-            if (!animSettings.enabled) return;
+            if (!animSettings.enabled || isSmallScreen()) return;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw pulses
+            for (let i = pulses.length - 1; i >= 0; i--) {
+                pulses[i].radius += pulses[i].speed;
+                if (pulses[i].radius > pulses[i].maxRadius) {
+                    pulses.splice(i, 1); // Remove pulse when it's done
+                }
+            }
 
             // Draw connecting lines
             for (let i = 0; i < particles.length; i++) {
@@ -2444,6 +2395,20 @@
                             }
                         }
 
+                        // Check for pulse interaction on lines
+                        for (let k = 0; k < pulses.length; k++) {
+                            const pulse = pulses[k];
+                            const midX = (p1.x + p2.x) / 2;
+                            const midY = (p1.y + p2.y) / 2;
+                            const dx = pulse.x - midX;
+                            const dy = pulse.y - midY;
+                            const distanceToPulseCenter = Math.sqrt(dx * dx + dy * dy);
+                            if (distanceToPulseCenter > pulse.radius - 60 && distanceToPulseCenter < pulse.radius) {
+                                const alpha = 1 - distance / animSettings.connectionDistance;
+                                strokeStyle = `rgba(34, 197, 94, ${alpha * 1.5})`; // Make pulse lines slightly brighter
+                            }
+                        }
+
                         ctx.strokeStyle = strokeStyle;
                         ctx.lineWidth = 0.4;
                         ctx.moveTo(p1.x, p1.y);
@@ -2469,6 +2434,7 @@
         function stopAnimation() {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            animationFrameId = null; // Explicitly clear the animation frame ID
         }
 
         resizeCanvas();
