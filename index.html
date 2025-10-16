@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Taiko Task Master</title>
+    <title>Taiko</title>
     
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,6 +13,10 @@
         body {
             font-family: sans-serif;
             background-color: #0f172a; /* Fallback background */
+        }
+        .transition-all {
+            /* Use a smoother easing curve for all transitions */
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
         }
         .pulse-border-high { animation: pulse-border-high 1.2s infinite; }
         @keyframes pulse-border-high { 
@@ -90,28 +94,53 @@
 
     // -----------------------------------------------------------------------------------------------------------------------------  THIS IS WHERE THE RELEASE NOTES ARE -----------------------------------------------------------------------------------------------------------------------------
     // --- Global Constants & Configurations ---
-    const CURRENT_APP_VERSION = '1.2.0';
+    const CURRENT_APP_VERSION = '1.3.0';
 
     const RELEASE_NOTES = {
-        '1.2.0': {
-            title: "What's New in Version 1.2.0",
+        '1.0.0': {
+            title: "Version 1.0.0",
             notes: [
                 {
-                    title: "🎨 Major UI Redesign: Task Cards",
-                    description: "Task cards have been completely redesigned for better clarity and functionality, featuring a cleaner layout and a new way to manage status."
+                    title: "🚀 Initial Launch",
+                    description: "The first version of Taiko is here! A simple, clean, and effective task manager designed to help you focus."
+                }
+            ]
+        },
+        '1.2.0': {
+            title: "Previous Version: 1.2.0",
+            notes: [
+                {
+                    title: "✅ Core Task Management",
+                    description: "Create, edit, and delete tasks. Set priorities (High, Medium, Low) and organize them into projects."
                 },
                 {
-                    title: "📝 Feature: Detailed Task Notes",
-                    description: "You can now add, edit, and view multi-line notes directly within each task card. The notes section is expandable and auto-saves your content."
+                    title: "⚙️ Project & Filter System",
+                    description: "Filter tasks by project or priority to focus on what matters most. Manage projects with ease."
                 },
                 {
-                    title: "🚀 Feature: Completed Task Summary",
-                    description: "Generate a detailed, timezone-aware summary of all completed tasks, including their notes and subtasks. Find the new document icon in the header!"
+                    title: "✨ Interactive Background",
+                    description: "Enjoy a dynamic, interactive particle animation in the background, with settings to customize the experience."
+                }
+            ]
+        },
+        '1.3.0': {
+            title: "What's New in Version 1.3.0",
+            notes: [
+                {
+                    title: "✨ New UI: Master-Detail Layout",
+                    description: "The application has been redesigned with a master-detail layout. Browse a compact list of tasks on the left and see the full details of your selected task on the right."
+                },
+                {
+                    title: "📂 New Feature: Project-Based Views",
+                    description: "Click on any project header in the task list to view all tasks within that project together in the detail pane, making it easier to focus on specific workstreams."
+                },
+                {
+                    title: "🎨 Redesigned Task Cards & Filters",
+                    description: "Task cards have been updated for better clarity within the new layout, and the filtering UI has been streamlined into a single, easy-to-use dropdown menu."
                 }
             ]
         }
-        // Future versions can be added here
-    };
+    }; // Versions should be in ascending order for display logic
 
 
     const PRIORITIES = { // These are the internal constant values
@@ -136,35 +165,24 @@
         null: { title: "Unprioritized", color: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-600", pulseClass: 'pulse-border-default' } // For null priority
     };
 
-    // Now define constants that depend on PRIORITIES and PRIORITY_CONFIG
-    const PRIORITY_DISPLAY_TITLES_ARRAY = Object.values(PRIORITIES) // e.g., ["Low", "Medium", "High"]
-        .map(pKey => PRIORITY_CONFIG[pKey]?.title)
-        .filter(Boolean); // e.g., ["Low", "Medium", "High"]
     const PRIORITY_TITLE_TO_CONSTANT_MAP = Object.fromEntries( // e.g., { "Low": "PRIORITY_LOW", ... }
-      Object.values(PRIORITIES).map(pConstant => [PRIORITY_CONFIG[pConstant]?.title, pConstant]).filter(([title]) => title)
+        Object.values(PRIORITIES).map(pConstant => [PRIORITY_CONFIG[pConstant]?.title, pConstant]).filter(([title]) => title)
     ); // e.g., { "Low": "PRIORITY_LOW", ... }
 
-    const TASK_STATUS = { TO_DO: 'To Do', IN_PROGRESS: 'In Progress', ON_HOLD: 'On Hold', DONE: 'Done' };
-    const TIMEZONE_MAP = { EST: 'America/New_York', PST: 'America/Los_Angeles', UTC: 'UTC' };
-    const TIMEZONE_ORDER = ['EST', 'PST', 'UTC'];
+    const TASK_STATUS = { TO_DO: 'To Do', DONE: 'Done' };
+    const TIMEZONES = [
+        { value: 'America/New_York', label: 'EST' },
+        { value: 'America/Chicago', label: 'CST' },
+        { value: 'America/Denver', label: 'MST' },
+        { value: 'America/Los_Angeles', label: 'PST' },
+        { value: 'UTC', label: 'UTC' },
+    ];
     const TASK_STATUS_CONFIG = {
         [TASK_STATUS.TO_DO]: { 
             label: 'To Do', 
             selectBgColor: 'bg-sky-900/50', 
             accentClass: 'bg-sky-400',
             glowClass: 'shadow-[0_0_15px_-4px_rgba(56,189,248,0.5)] hover:shadow-[0_0_18px_-3px_rgba(56,189,248,0.7)]'
-        },
-        [TASK_STATUS.IN_PROGRESS]: { 
-            label: 'In Progress', 
-            selectBgColor: 'bg-yellow-900/50', 
-            accentClass: 'bg-amber-400',
-            glowClass: 'shadow-[0_0_15px_-4px_rgba(251,191,36,0.5)] hover:shadow-[0_0_18px_-3px_rgba(251,191,36,0.7)]'
-        },
-        [TASK_STATUS.ON_HOLD]: { 
-            label: 'On Hold', 
-            selectBgColor: 'bg-slate-700/50', 
-            accentClass: 'bg-slate-500',
-            glowClass: 'shadow-[0_0_15px_-4px_rgba(100,116,139,0.4)] hover:shadow-[0_0_18px_-3px_rgba(100,116,139,0.6)]'
         },
         [TASK_STATUS.DONE]: { 
             label: 'Done', 
@@ -213,19 +231,18 @@
     const AppProvider = ({ children }) => {
         // --- Core State ---
         const [tasks, setTasks] = useState([]);
+        const [projectSettings, setProjectSettings] = useState({});
         const [settings, setSettings] = useState({ 
             confirmOnDelete: true, 
-            autoCollapse: true, // Default to true
+            animationSettings: { enabled: true, particleCount: 350, connectionDistance: 200, particleSpeed: 0.3, mouseInteraction: true, clickPulse: true }
         });
 
         // --- Modal-related State ---
-        const [taskToComplete, setTaskToComplete] = useState(null);
         const [taskToDelete, setTaskToDelete] = useState(null);
         // --- UI Interaction State (lifted from App) ---
-        const [showCompleted, setShowCompleted] = useState(false);
+        const [selectedTaskId, setSelectedTaskId] = useState(null);
         const [activeTags, setActiveTags] = useState([]); // For filtering
-        const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({});
-        const [collapsedColumns, setCollapsedColumns] = useState({ 'unsorted': false }); // For fixed columns like "Unsorted"
+        const [collapsedProjects, setCollapsedProjects] = useState({ 'Completed': true });
 
         const appId = 'taiko-app-local';
 
@@ -236,8 +253,7 @@
             
             const defaultSettings = {
                 confirmOnDelete: true,
-                autoCollapse: true, // compactView removed
-                animationSettings: { enabled: true, particleCount: 250, connectionDistance: 170, particleSpeed: 0.5 }
+                animationSettings: { enabled: true, particleCount: 350, connectionDistance: 200, particleSpeed: 0.3, mouseInteraction: true, clickPulse: true }
             };
 
             const savedSettings = localStorage.getItem(`${appId}-settings`);
@@ -258,42 +274,42 @@
                 setSettings(defaultSettings); // No saved settings, use defaults
             }
 
-            const savedShowCompleted = localStorage.getItem(`${appId}-showCompleted`);
-            if (savedShowCompleted) try { setShowCompleted(JSON.parse(savedShowCompleted)); } catch { console.error("Could not parse saved showCompleted state."); setShowCompleted(false); }
-
             const savedActiveTags = localStorage.getItem(`${appId}-activeTags`);
             if (savedActiveTags) try { setActiveTags(JSON.parse(savedActiveTags)); } catch { console.error("Could not parse saved active tags."); setActiveTags([]); }
 
-            const savedCollapsedTagSwimlanes = localStorage.getItem(`${appId}-collapsedTagSwimlanes`);
-            if (savedCollapsedTagSwimlanes) try { setCollapsedTagSwimlanes(JSON.parse(savedCollapsedTagSwimlanes)); } catch { console.error("Could not parse saved collapsed tag swimlanes."); setCollapsedTagSwimlanes({}); }
-            
-            const defaultCollapsedColumns = { 'unsorted': false }; // Updated key
-            const savedCollapsedColumns = localStorage.getItem(`${appId}-collapsedColumns`);
-            if (savedCollapsedColumns) {
+            const defaultCollapsedProjects = { 'Completed': true };
+            const savedCollapsedProjects = localStorage.getItem(`${appId}-collapsedProjects`);
+            if (savedCollapsedProjects) {
                 try {
-                    setCollapsedColumns(JSON.parse(savedCollapsedColumns));
+                    setCollapsedProjects(JSON.parse(savedCollapsedProjects));
                 } catch {
-                    console.error("Could not parse saved collapsed columns. Using defaults.");
-                    setCollapsedColumns(defaultCollapsedColumns);
+                    setCollapsedProjects(defaultCollapsedProjects);
                 }
             } else {
-                setCollapsedColumns(defaultCollapsedColumns);
+                setCollapsedProjects(defaultCollapsedProjects);
             }
+
+            const savedProjectSettings = localStorage.getItem(`${appId}-projectSettings`);
+            if (savedProjectSettings) try { setProjectSettings(JSON.parse(savedProjectSettings)); } catch { console.error("Could not parse saved project settings."); }
         }, [appId]); 
+        useEffect(() => {
+            const savedSelectedTask = localStorage.getItem(`${appId}-selectedTaskId`);
+            if (savedSelectedTask) try { setSelectedTaskId(JSON.parse(savedSelectedTask)); } catch { console.error("Could not parse saved selected task."); setSelectedTaskId(null); }
+        }, [appId]);
 
         // --- Consolidated Local Storage Persistence ---
         useEffect(() => {
             try {
                 localStorage.setItem(`${appId}-tasks`, JSON.stringify(tasks));
                 localStorage.setItem(`${appId}-settings`, JSON.stringify(settings));
-                localStorage.setItem(`${appId}-showCompleted`, JSON.stringify(showCompleted));
+                localStorage.setItem(`${appId}-projectSettings`, JSON.stringify(projectSettings));
                 localStorage.setItem(`${appId}-activeTags`, JSON.stringify(activeTags));
-                localStorage.setItem(`${appId}-collapsedTagSwimlanes`, JSON.stringify(collapsedTagSwimlanes));
-                localStorage.setItem(`${appId}-collapsedColumns`, JSON.stringify(collapsedColumns));
+                localStorage.setItem(`${appId}-collapsedProjects`, JSON.stringify(collapsedProjects));
+                localStorage.setItem(`${appId}-selectedTaskId`, JSON.stringify(selectedTaskId));
             } catch (error) {
                 console.error("Failed to save state to localStorage", error);
             }
-        }, [tasks, settings, showCompleted, activeTags, collapsedTagSwimlanes, collapsedColumns, appId]);
+        }, [tasks, settings, projectSettings, activeTags, collapsedProjects, selectedTaskId, appId]);
 
         // --- Effect to dispatch animation settings changes to the global scope ---
         useEffect(() => {
@@ -301,15 +317,23 @@
             window.dispatchEvent(event);
         }, [settings.animationSettings]);
 
-        // --- Notification Permission ---
+        // --- Effect to auto-collapse 'Completed' project when it becomes empty ---
         useEffect(() => {
-            if ('Notification' in window && Notification.permission === 'default') {
-                Notification.requestPermission();
+            const completedCount = tasks.filter(task => task.status === TASK_STATUS.DONE).length;
+            if (completedCount === 0) {
+                if (collapsedProjects['Completed'] !== true) {
+                    setCollapsedProjects(prev => ({ ...prev, 'Completed': true }));
+                }
             }
-        }, []);
+        }, [tasks, collapsedProjects]); // Reruns when tasks change
 
-        // --- Derived State ---
-        const currentTasks = useMemo(() => showCompleted ? tasks.filter(t => t.status === TASK_STATUS.DONE) : tasks.filter(t => t.status !== TASK_STATUS.DONE), [tasks, showCompleted]);
+        // When filters change, or tasks are deleted, make sure the selected task is still visible.
+        useEffect(() => {
+            if (selectedTaskId && !tasks.find(t => t.id === selectedTaskId)) {
+                setSelectedTaskId(null);
+            }
+        }, [tasks, selectedTaskId]);
+
 
         // --- Core Data Actions ---
         const updateTask = useCallback((id, updatedFields) => {
@@ -318,7 +342,7 @@
             ));
         }, []);
         
-        const addTask = useCallback((initialTitle = 'New Task', initialPriority = null, initialTags = []) => {
+        const addTask = useCallback((initialTitle = 'New Task', initialProject = null, initialPriority = null) => {
             const newTask = {
                 id: crypto.randomUUID(),
                 title: initialTitle, 
@@ -327,15 +351,14 @@
                 status: 'To Do',
                 rank: tasks.filter(t => t.priority === initialPriority && !t.archived).length, // Rank will be based on the current priority value
                 timestamp: new Date().toISOString(), 
-                startedAt: null,
-                notes: '', // Add a notes field
-                totalElapsedTimeInSeconds: 0,
-                reminderAt: null, 
-                reminderFired: false, 
-                tags: Array.isArray(initialTags) ? [...new Set(initialTags)] : [] // Ensure unique tags
+                project: initialProject,
+                notes: '', 
+                reminderAt: null,
+                reminderFired: false
             };
-            setTasks(prevTasks => [newTask, ...prevTasks].sort((a, b) => (a.rank || 0) - (b.rank || 0) || new Date(a.timestamp) - new Date(b.timestamp))); // Add to top and re-sort
-        }, [tasks]);
+            setTasks(prevTasks => [newTask, ...prevTasks]);
+            return newTask; // Return the new task so we can select it
+        }, [tasks]); // tasks dependency is for rank calculation
 
         const deleteTask = useCallback((id) => {
             setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
@@ -345,47 +368,62 @@
             setTasks(prevTasks => prevTasks.filter(task => task.status !== TASK_STATUS.DONE));
         }, []);
 
-        const allTags = useMemo(() => {
-            // allTags should contain all custom tags from ALL tasks to ensure swimlane management is always complete.
-            const customTagsSet = new Set();
-            tasks.forEach(task => { // Iterate over all tasks
-                (task.tags || []).forEach(tag => {
-                    // Check if the tag is a priority display title (case-insensitive)
-                    const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
-                        pTitle => pTitle.toLowerCase() === tag.toLowerCase()
-                    );
-                    if (!isPriorityTitle) {
-                        customTagsSet.add(tag);
-                    }
-                });
-            });
-            return Array.from(customTagsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-        }, [tasks, PRIORITY_DISPLAY_TITLES_ARRAY]); // Depends on all tasks now
+        const renameProject = useCallback((oldName, newName) => {
+            if (!newName || oldName === newName) return;
+            setTasks(prevTasks => 
+                prevTasks.map(task => 
+                    task.project === oldName ? { ...task, project: newName } : task
+                )
+            );
+        }, []);
 
-        const toggleSwimlaneCollapse = useCallback((swimlaneName) => {
-            setCollapsedTagSwimlanes(prev => ({ ...prev, [swimlaneName]: !prev[swimlaneName] }));
-        }, []); // setCollapsedTagSwimlanes is stable
+        const deleteProject = useCallback((projectName) => {
+            setTasks(prevTasks => 
+                prevTasks.map(task => 
+                    task.project === projectName ? { ...task, project: null } : task
+                )
+            );
+        }, []);
+
+        const updateProjectSetting = useCallback((projectName, newSettings) => {
+            setProjectSettings(prev => ({
+                ...prev,
+                [projectName]: {
+                    ...(prev[projectName] || {}),
+                    ...newSettings
+                }
+            }));
+        }, []);
+        const allTags = useMemo(() => {
+            // This will now be allProjects
+            const projectsSet = new Set();
+            tasks.forEach(task => {
+                if (task.project) {
+                    projectsSet.add(task.project);
+                }
+            });
+            return Array.from(projectsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }, [tasks]);
+
+        const toggleProjectCollapse = useCallback((projectName) => {
+            setCollapsedProjects(prev => ({ ...prev, [projectName]: !prev[projectName] }));
+        }, []);
 
 
         const contextValue = useMemo(() => ({
-            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks,
-            settings, setSettings, allTags,
-            taskToComplete, setTaskToComplete,
+            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks, renameProject, deleteProject, updateProjectSetting,
+            settings, setSettings, allTags, projectSettings,
             taskToDelete, setTaskToDelete,
             activeTags, setActiveTags,
-            collapsedTagSwimlanes, setCollapsedTagSwimlanes,
-            collapsedColumns, setCollapsedColumns, // Added for fixed columns
-            toggleSwimlaneCollapse,
-            showCompleted, setShowCompleted, currentTasks
+            selectedTaskId, setSelectedTaskId,
+            collapsedProjects,
+            toggleProjectCollapse
         }), [
-            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks,
-            settings, setSettings, allTags, 
-            taskToComplete, setTaskToComplete,
+            tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks, renameProject, deleteProject, updateProjectSetting,
+            settings, setSettings, allTags, projectSettings,
             taskToDelete, setTaskToDelete,
-            activeTags, setActiveTags, 
-            collapsedTagSwimlanes, setCollapsedTagSwimlanes,
-            collapsedColumns, setCollapsedColumns, toggleSwimlaneCollapse,
-            showCompleted, currentTasks
+            activeTags, setActiveTags, selectedTaskId,
+            collapsedProjects, toggleProjectCollapse
         ]);
         
         return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -447,8 +485,7 @@
         const totalSeconds = h * 3600 + m * 60 + s;
         return totalSeconds > 0 ? totalSeconds : null;
     };
-    const PRIORITY_TAGS_LIST = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // May be unused by new logic but kept for now.
-    const DISPLAY_PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For UI column display - CHANGED ORDER
+    const DISPLAY_PRIORITY_ORDER = [PRIORITIES.LOW, PRIORITIES.MEDIUM, PRIORITIES.HIGH]; // For UI column display
 
     // --- Icon Components (Memoized) ---
     const DeleteIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>);
@@ -475,23 +512,34 @@
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
     ));
+    const NoteIcon = React.memo(({ hasNote, className }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {hasNote ? <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />}
+        </svg>
+    ));
+    const FolderIcon = React.memo(() => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+    ));
+    const CheckIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>);
     const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
     // --- Time & Countdown Components (Memoized) ---
     const LiveClock = React.memo(({ timezone, onTimezoneChange }) => {
         const time = useNow();
-        const dateOptions = useMemo(() => ({ weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }), []);
-        const timeZone = useMemo(() => TIMEZONE_MAP[timezone], [timezone]);
-        
-        const formattedTime = time.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const formattedTime = time.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const currentLabel = TIMEZONES.find(tz => tz.value === timezone)?.label || timezone;
         
         return (
             <div className="flex flex-row items-baseline space-x-2 text-slate-300">
                 <span className="text-2xl md:text-4xl font-mono tracking-wider">{formattedTime}</span>
-                <button onClick={onTimezoneChange} title="Click to change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors">
-                    {timezone}
-                </button>
+                <select value={timezone} onChange={e => onTimezoneChange(e.target.value)} title="Change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-none focus:ring-0 cursor-pointer appearance-none pr-2">
+                    {TIMEZONES.map(tz => (
+                        <option key={tz.value} value={tz.value} className="bg-slate-800 text-white">{tz.label}</option>
+                    ))}
+                </select>
             </div>
         );
     });
@@ -550,7 +598,6 @@
         isFocused, 
         onFocusHandled, 
         isLocked, 
-        onDragStartItem, 
         onDropItem, 
         onDragEndItem,
         clockTimezone // Added for displaying subtask completion time
@@ -563,7 +610,6 @@
             e.stopPropagation(); // Prevent parent elements from also being dragged
             e.dataTransfer.setData('text/plain', item.id); // Set the ID of the dragged item
             e.dataTransfer.effectAllowed = 'move';
-            onDragStartItem(item.id); // Notify parent TaskCard
         };
 
         const handleDragOver = (e) => {
@@ -573,11 +619,7 @@
 
         const handleDragEnter = (e) => {
             e.preventDefault();
-            // Only highlight if the dragged item is not this item itself
-            // We need to check against the currently dragged item ID from the parent
-            if (onDragStartItem.current !== item.id) { 
-                setIsDragOver(true);
-            }
+            setIsDragOver(true);
         };
 
         useEffect(() => {
@@ -638,7 +680,7 @@
                 <input 
                     type="checkbox" 
                     checked={item.completed} 
-                    onChange={e => {
+                    onChange={(e) => {
                         const isCompleted = e.target.checked;
                         onUpdate(item.id, { completed: isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
                     }} disabled={isLocked} className="form-checkbox h-4 w-4 rounded bg-slate-700 border-slate-500 text-sky-500 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" />
@@ -655,7 +697,7 @@
                 {item.completed && item.completedAt && (
                     <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
                         ({new Date(item.completedAt).toLocaleString('en-US', {
-                            timeZone: TIMEZONE_MAP[clockTimezone] || 'UTC',
+                            timeZone: clockTimezone,
                             month: 'numeric', day: 'numeric', year: 'numeric',
                             hour: '2-digit', minute: '2-digit'
                         })})
@@ -671,47 +713,32 @@
 
     // --- Task Card Component ---
     const TaskCard = ({ task, clockTimezone }) => {
-        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, setTaskToComplete, activeTags } = useAppContext();
+        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, activeTags } = useAppContext();
         const now = useNow();
         const isLocked = task.status === TASK_STATUS.DONE;
-
         const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
         const [title, setTitle] = useState(task.title);
-        const [isSettingReminder, setIsSettingReminder] = useState(false);
-        const [reminderInput, setReminderInput] = useState('');
         const [checklist, setChecklist] = useState(task.checklist || []);
-        const [newTag, setNewTag] = useState('');
-        const [tagError, setTagError] = useState('');
         // State for task notes
         const [notes, setNotes] = useState(task.notes || '');
-        // State for notes visibility
-        const [isNotesExpanded, setIsNotesExpanded] = useState(false);
         // State to manage which checklist item should be focused
         const [focusedItemId, setFocusedItemId] = useState(null);
         const draggedChecklistItemId = useRef(null); // Use ref to avoid re-renders during drag
         const notesTextareaRef = useRef(null); // Ref for the notes textarea
+        const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
         useEffect(() => { setTitle(task.title); }, [task.title]);
-
-        useEffect(() => {
-            if (tagError) {
-                const timer = setTimeout(() => {
-                    setTagError('');
-                }, 3000); // Clear error after 3 seconds
-                return () => clearTimeout(timer);
-            }
-        }, [tagError]);
         useEffect(() => { setNotes(task.notes || ''); }, [task.notes]); // Sync notes state with prop
-        
+
         // Effect to auto-resize the notes textarea
         useEffect(() => {
-            if (isNotesExpanded && notesTextareaRef.current) {
+            if (notesTextareaRef.current) {
                 const textarea = notesTextareaRef.current;
                 textarea.style.height = 'auto'; // Reset height to allow shrinking
                 textarea.style.height = `${textarea.scrollHeight}px`; // Set to content height
             }
-        }, [notes, isNotesExpanded]); // Rerun on content change or when expanded
+        }, [notes]); // Rerun on content change
 
         const handleDeleteRequest = useCallback(() => {
             if (settings.confirmOnDelete) {
@@ -745,81 +772,22 @@
         const handleTitleBlur = () => { setIsEditingTitle(false); if (title !== task.title) updateTask(task.id, { title }); };
         const handleTitleKeyDown = (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTitleBlur(); } };
         
-        const handleAddTag = () => {
-            const currentTags = task.tags || [];
-            const trimmedNewTag = newTag.trim();
-    
-            // Prohibit adding priority display titles as custom tags (case-insensitive)
-            const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
-                pTitle => pTitle.toLowerCase() === trimmedNewTag.toLowerCase()
-            );
-    
-            if (trimmedNewTag && !isPriorityTitle && !currentTags.includes(trimmedNewTag)) {
-                const newTagsArray = [...currentTags, trimmedNewTag];
-                updateTask(task.id, { tags: newTagsArray });
-    
-            } else if (isPriorityTitle) {
-                setTagError('Cannot add "Low", "Medium", or "High" as custom tags. Use priority buttons.');
-                playTone(220, 0.3, 'square', 0.2); // Play a low, short error tone
-            }
-            setNewTag(''); // Clear input in all cases
-        };
-
-        const handleRemoveTag = (tagToRemove) => {
-            const currentTags = task.tags || [];
-            const newTags = (task.tags || []).filter(tag => tag !== tagToRemove);
-            updateTask(task.id, { tags: newTags });
-        };
-
-        const handleSetReminder = useCallback(() => {
-            if (!reminderInput) return;
-
-            const durationInSeconds = parseHHMMSSDuration(reminderInput);
-
-            if (durationInSeconds === null || durationInSeconds <= 0) {
-                console.warn("Invalid duration input for reminder:", reminderInput);
-                // Optionally, you could set an error state here to show a message to the user
-                return;
-            }
-
-            const reminderDate = new Date(Date.now() + durationInSeconds * 1000);
-            updateTask(task.id, { reminderAt: reminderDate.toISOString(), reminderFired: false });
-            setIsSettingReminder(false);
-            setReminderInput(''); // Clear input after setting
-        }, [reminderInput, task.id, updateTask, setIsSettingReminder, setReminderInput]);
-
-        const handleReminderKeyDown = (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); handleSetReminder(); }
-        };
-
-        const handleNotesKeyDown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                updateTask(task.id, { notes }); // Save notes
-                setIsNotesExpanded(false); // Collapse view
-            }
-        };
-        
         const handleSetPriority = (priorityToSet) => {
             // If the clicked priority is the same as the current one, clear it. Otherwise, set it.
             const newPriority = task.priority === priorityToSet ? null : priorityToSet;
             updateTask(task.id, { priority: newPriority });
         };
 
-        const handleStatusChange = (e) => {
-            const newStatus = e.target.value;
-            if (newStatus === TASK_STATUS.DONE) {
-                setTaskToComplete(task); // Show confirmation modal
+        const handleCompletionToggle = () => {
+            const isCurrentlyDone = task.status === TASK_STATUS.DONE;
+            if (isCurrentlyDone) {
+                updateTask(task.id, { status: TASK_STATUS.TO_DO });
             } else {
-                updateTask(task.id, { status: newStatus }); // Update directly for other statuses
+                updateTask(task.id, { status: TASK_STATUS.DONE, reminderAt: null, reminderFired: false });
             }
         };
         
         // Drag and Drop Handlers for Checklist Items
-        const handleDragStartChecklistItem = useCallback((id) => {
-            draggedChecklistItemId.current = id;
-        }, []);
-
         const handleDropChecklistItem = useCallback((draggedId, targetId) => {
             const draggedIndex = checklist.findIndex(item => item.id === draggedId);
             const targetIndex = checklist.findIndex(item => item.id === targetId);
@@ -843,129 +811,90 @@
         const cardPadding = 'p-3';
         const titleFontSize = ''; // Default is text-lg from h3
         const textSize = 'text-sm';
-
+        
         return (
-            <div className={`w-full min-w-0 bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-lg shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''}`}>
-                <div className={`h-1 rounded-t-lg ${TASK_STATUS_CONFIG[task.status]?.accentClass}`}></div>
-                <div className={cardPadding}>
-                    <div className="flex justify-between items-start mb-1.5">
-                        {isEditingTitle ? (
-                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className={`flex-1 min-w-0 bg-slate-900/50 rounded-md p-1 text-slate-100 font-bold border border-slate-600 focus:ring-2 focus:ring-sky-500 ${titleFontSize}`} />
-                        ) : (
-                            <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-bold text-slate-100 flex-grow min-w-0 break-words ${isLocked ? 'cursor-default' : 'cursor-pointer'} ${titleFontSize}`}>{task.title}</h3>
-                        )}
+            <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''}`}>
+                {/* --- Header: Project, Title, Priority --- */}
+                <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
+                    <div className="flex justify-between items-center mb-1">
+                        {/* Task Title */}
+                        <div className="flex-grow min-w-0 mr-4">
+                            {isEditingTitle ? (
+                                <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className={`w-full bg-slate-900/50 rounded-md py-1 text-slate-50 font-semibold text-lg border border-slate-600 focus:ring-2 focus:ring-sky-500`} />
+                            ) : (
+                                <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-semibold text-slate-50 break-words text-lg ${isLocked ? 'cursor-default line-through text-slate-500' : 'cursor-pointer'}`}>{task.title}</h3>
+                            )}
+                        </div>
+
+                        {/* Priority Dots */}
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                            <span className="text-xs text-slate-400">Priority:</span>
+                            {DISPLAY_PRIORITY_ORDER.map(pConst => {
+                                const config = PRIORITY_CONFIG[pConst];
+                                const isSelected = task.priority === pConst;
+                                return (
+                                    <button
+                                        key={pConst}
+                                        title={`Set priority: ${config.title}`}
+                                        onClick={() => handleSetPriority(pConst)}
+                                        disabled={isLocked}
+                                        className={`w-3 h-3 rounded-full transition-all duration-150 ${isSelected ? `ring-2 ring-offset-2 ring-offset-slate-800 ${config.color.replace('text-', 'ring-')}` : 'opacity-50 hover:opacity-100'} ${config.color.replace('text-', 'bg-')}`}
+                                    ></button>
+                                );
+                            })}
+                        </div>
                     </div>
+                </div>
 
-                    <ul className="space-y-1 my-2">{checklist.map(item => 
-                        <ChecklistItem 
-                            key={item.id} 
-                            item={item} 
-                            onUpdate={handleItemUpdate} 
-                            onDelete={handleItemDelete} 
-                            onAddNewItemAfter={handleAddNewItemAfter}
-                            isFocused={focusedItemId === item.id}
-                            onFocusHandled={() => setFocusedItemId(null)}
-                            isLocked={isLocked}
-                            clockTimezone={clockTimezone} // Pass clockTimezone to ChecklistItem
-                            onDragStartItem={handleDragStartChecklistItem}
-                            onDropItem={handleDropChecklistItem}
-                            onDragEndItem={handleDragEndChecklistItem}
-                        />
-                    )}</ul>
-                    <button onClick={handleAddItem} title="Add a new checklist item" disabled={isLocked} className={`w-full text-left text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:bg-transparent ${textSize}`}>+ Add item</button>
-
+                <div className="px-4 pb-3 space-y-3">
                     {/* --- Notes Section --- */}
-                    <div className="mt-2 pt-2 border-t border-slate-700/50">
-                        {isNotesExpanded ? (
-                            <>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label htmlFor={`notes-${task.id}`} className="block text-xs text-slate-400">Notes:</label>
-                                    <button onClick={() => setIsNotesExpanded(false)} title="Collapse notes section" className={`text-sky-400 hover:text-sky-300 ${textSize}`}>Collapse</button>
-                                </div>
-                                <textarea
-                                    ref={notesTextareaRef}
-                                    id={`notes-${task.id}`}
-                                    value={notes}
-                                    onChange={e => setNotes(e.target.value)}
-                                    onBlur={() => updateTask(task.id, { notes })}
-                                    onKeyDown={handleNotesKeyDown}
-                                    placeholder="Add detailed notes here..."
-                                    className={`w-full bg-slate-900/50 text-slate-200 p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 resize-none min-h-[60px] overflow-hidden ${textSize}`}
-                                    autoFocus
-                                ></textarea>
-                            </>
-                        ) : (
-                            <div className="flex justify-between items-center min-h-[24px]"> {/* Set min-height to prevent layout shift */}
-                                {notes ? (
-                                    <p className={`${textSize} text-slate-400 truncate flex-1 pr-2`}><span className="font-semibold text-slate-300">Note:</span> {notes.split('\n')[0]}</p>
-                                ) : (
-                                    <p className={`${textSize} text-slate-500 italic`}>No notes for this task.</p>
-                                )}
-                                <button onClick={() => setIsNotesExpanded(true)} title={notes ? 'View or edit notes' : 'Add notes'} disabled={isLocked} className={`${textSize} text-sky-400 hover:text-sky-300 flex-shrink-0 disabled:text-slate-500 disabled:cursor-not-allowed`}>{notes ? 'View/Edit' : 'Add Note'}</button>
-                            </div>
-                        )}
-                    </div>
-                    {/* --- Tagging UI --- */}
-                    <div className="mt-2 pt-2 border-t border-slate-700/50">
-                        <div className="flex flex-wrap items-center gap-1 mb-2">
-                            <span className="text-xs text-slate-400">Priority:</span> {/* Removed mr-2, gap will handle spacing */}
-                            {DISPLAY_PRIORITY_ORDER.map(pTag => ( /* Use DISPLAY_PRIORITY_ORDER for consistent button order */                                <button 
-                                    key={pTag} title={`Set priority to ${PRIORITY_CONFIG[pTag].title}`}
-                                    onClick={() => handleSetPriority(pTag)}
-                                    disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === pTag ? `${PRIORITY_CONFIG[pTag].bgColor} ${PRIORITY_CONFIG[pTag].borderColor} ${PRIORITY_CONFIG[pTag].color}` : `bg-slate-600/50 border-slate-500 text-slate-300 hover:${PRIORITY_CONFIG[pTag].bgColor}`} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`} /* Removed mr-1 mb-1, added flex-shrink-0 */
-                                >
-                                    {PRIORITY_CONFIG[pTag].title}
-                                </button>
-                            ))}
-                            <button onClick={() => handleSetPriority(null)} title="Clear priority (Unprioritized)" disabled={isLocked} className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${task.priority === null ? `${PRIORITY_CONFIG[null].bgColor} ${PRIORITY_CONFIG[null].borderColor} ${PRIORITY_CONFIG[null].color}` : 'bg-slate-600/50 border-slate-500 text-slate-300 hover:bg-slate-500/30'} flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}> {/* Removed mr-1 mb-1, added flex-shrink-0 */}
-                                Clear
-                            </button>
-                        </div>
-                        </div>
-                    <div className="mt-2 pt-2 border-t border-slate-700/50"> {/* This is the start of the custom tags section, unchanged by this request */}
-                        <div className="flex flex-wrap gap-2 mb-2"> {/* Added mb-2 for spacing before input */}
-                            {(task.tags || []).filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag)).map(tag => (
-                                <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
-                                    {tag}
-                                    <button onClick={() => handleRemoveTag(tag)} title={`Remove tag: ${tag}`} disabled={isLocked} className="ml-2 text-slate-400 hover:text-white leading-none disabled:hidden">&times;</button>
-                                </span>
-                            ))}
-                        </div>
-                        <div className="flex"> {/* Removed mt-2 as mb-2 was added above */}
-                            <input
-                                list="tag-suggestions"
-                                type="text"
-                                value={newTag}
-                                onChange={(e) => setNewTag(e.target.value)}
-                                onKeyDown={(e) => {if (e.key === 'Enter') handleAddTag()}}
-                                placeholder="Add a tag..."                                disabled={isLocked} className="bg-slate-900/50 text-slate-200 text-xs p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0 disabled:cursor-not-allowed disabled:bg-slate-800"
-                            />
-                            <datalist id="tag-suggestions">
-                                {allTags.map(tag => <option key={tag} value={tag} />)}
-                            </datalist>
-                            <button onClick={handleAddTag} title="Add this tag to the task" disabled={isLocked} className="ml-2 text-xs bg-sky-600 text-white px-3 py-1 rounded-md hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Add</button> {/* Adjusted py-1 for consistency */}
-                        </div>
-                        {tagError && <div className="mt-1.5 text-xs text-red-400">{tagError}</div>}
+                    <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+                        <h4 className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Notes</h4>
+                        <textarea
+                            ref={notesTextareaRef}
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                            onBlur={() => updateTask(task.id, { notes })}
+                            placeholder="Notes..."
+                            disabled={isLocked}
+                            className={`w-full bg-transparent text-slate-300 p-1 rounded-md border border-transparent focus:bg-slate-900/80 focus:border-slate-600 focus:ring-0 resize-none overflow-hidden ${textSize} placeholder-slate-500 disabled:cursor-not-allowed`}
+                        ></textarea>
                     </div>
 
-                    {isSettingReminder && !task.archived && (
-                        <div className="mt-2 flex items-center space-x-2">
-                            <input 
-                                type="text" 
-                                value={reminderInput}
-                                onChange={e => setReminderInput(e.target.value)}
-                                onKeyDown={handleReminderKeyDown}
-                                autoFocus 
-                                placeholder="Set in: MM:SS / SS"                                className="bg-slate-900/70 border border-slate-600 text-slate-200 text-sm rounded-md p-1 flex-1 min-w-0"/>
-                            <button onClick={handleSetReminder} title="Set reminder from input" className="px-3 py-1 bg-sky-600 text-white text-sm rounded-md hover:bg-sky-500">Set</button>
+                    {/* --- Checklist Section --- */}
+                    {(checklist.length > 0 || !isLocked) && (
+                        <div className="bg-slate-900/40 rounded-lg border border-slate-700/50">
+                            <button onClick={() => setIsChecklistExpanded(p => !p)} className="w-full flex justify-between items-center p-3 text-left">
+                                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Checklist ({checklist.length})</h4>
+                                <ChevronDownIcon className={`h-5 w-5 text-slate-400 transition-transform ${isChecklistExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isChecklistExpanded && <div className="p-3 pt-0 space-y-1">
+                                <ul className="space-y-1">{checklist.map(item => 
+                                    <ChecklistItem 
+                                        key={item.id} 
+                                        item={item} 
+                                        onUpdate={handleItemUpdate} 
+                                        onDelete={handleItemDelete} 
+                                        onAddNewItemAfter={handleAddNewItemAfter}
+                                        isFocused={focusedItemId === item.id}
+                                        onFocusHandled={() => setFocusedItemId(null)}
+                                        isLocked={isLocked}
+                                        clockTimezone={clockTimezone}
+                                        onDropItem={handleDropChecklistItem}
+                                        onDragEndItem={handleDragEndChecklistItem}
+                                    />
+                                )}</ul>
+                                <button onClick={handleAddItem} title="Add a new checklist item" disabled={isLocked} className={`w-full text-left text-sky-400 hover:text-sky-300 p-1 rounded-md hover:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:bg-transparent ${textSize}`}>+ Add item</button>
+                            </div>}
                         </div>
                     )}
-                    {task.reminderAt && !isSettingReminder && (
-                        <div className="mt-2 text-xs">
+                    
+                    {task.reminderAt && (
+                        <div className="pt-2 text-xs">
                             <div className="text-sky-300 flex justify-between items-center mb-0.5">
                                 <span>
                                     Set for: {new Date(task.reminderAt).toLocaleTimeString([], {
-                                        timeZone: TIMEZONE_MAP[clockTimezone] || 'UTC', // Fallback to UTC if map fails
+                                        timeZone: clockTimezone,
                                         hour: '2-digit', minute:'2-digit', second: '2-digit'
                                     })} {clockTimezone}
                                 </span>
@@ -974,35 +903,26 @@
                             <ReminderCountdown reminderAt={task.reminderAt} />
                         </div>
                     )}
-                    <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between items-center">
-                        {/* Manual Status Selector */}
+                    <div className="pt-3 border-t border-slate-700/50 flex justify-between items-center">
+                        <select 
+                            value={task.project || ''} 
+                            onChange={(e) => updateTask(task.id, { project: e.target.value || null })}
+                            disabled={isLocked}
+                            className="text-sm bg-slate-800 text-slate-200 px-2 py-1 rounded-md border border-slate-600 hover:bg-slate-700 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                            <option value="">Unassigned</option>
+                            {allTags.map(project => (
+                                <option key={project} value={project}>{project}</option>
+                            ))}
+                        </select>
                         <div className="flex items-center space-x-2">
-                            <label htmlFor={`status-select-${task.id}`} className={`${textSize} text-slate-400`}>Status:</label>
-                            <select
-                                id={`status-select-${task.id}`}
-                                value={task.status}
-                                onChange={handleStatusChange}
-                                className={`${TASK_STATUS_CONFIG[task.status]?.selectBgColor || 'bg-slate-900/50'} text-slate-200 p-1 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 transition-colors ${textSize}`}
+                            <button 
+                                onClick={handleCompletionToggle} 
+                                title={isLocked ? "Mark as 'To Do'" : "Mark as 'Done'"} 
+                                className={`p-1 rounded-full transition-colors ${isLocked ? 'bg-green-500 text-white' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'}`}
                             >
-                                {Object.values(TASK_STATUS).map(status => (
-                                    <option key={status} value={status}>{status}</option>
-                                ))}
-                            </select>
-                            {task.status === TASK_STATUS.DONE && task.timestamp && (
-                                <span className="text-xs text-green-400 whitespace-nowrap">
-                                    ({new Date(task.timestamp).toLocaleString('en-US', {
-                                        timeZone: TIMEZONE_MAP[clockTimezone] || 'UTC',
-                                        month: 'numeric',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    })})
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <button onClick={() => setIsSettingReminder(!isSettingReminder)} title={isSettingReminder ? "Cancel reminder setup" : "Set Reminder"} disabled={task.status === TASK_STATUS.DONE} className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700 disabled:opacity-50"><BellIcon /></button>
+                                <CheckIcon />
+                            </button>
                             <button onClick={handleDeleteRequest} title="Delete Permanently" className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button>
                         </div>
                     </div>
@@ -1012,82 +932,146 @@
     };
     const MemoizedTaskCard = React.memo(TaskCard);
 
+    // --- New Components for Master-Detail Layout ---
+    const TaskListItem = React.memo(({ task, isSelected, onSelect }) => {
+        const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.null;
+        const isDone = task.status === TASK_STATUS.DONE;
+
+        return (
+            <button
+                onClick={() => onSelect(task.id)}
+                className={`w-full text-left p-3 rounded-lg border transition-all duration-150 ${isSelected ? 'bg-sky-500/30 border-sky-400 shadow-lg' : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-500'}`}
+            >
+                <div className="flex justify-between items-start gap-2">
+                    <p className={`flex-grow font-semibold break-words ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                        {task.title}
+                    </p>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${priorityConfig.color} ${priorityConfig.bgColor} ${priorityConfig.borderColor} flex-shrink-0`}>
+                        {priorityConfig.title}
+                    </span>
+                </div>
+            </button>
+        );
+    });
+
+    const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, clockTimezone, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask }) => {
+        const { projectSettings, collapsedProjects, toggleProjectCollapse } = useAppContext();
+        const groupedAndSortedTasks = useMemo(() => { // This logic is correct, no changes needed here.
+            // Manual sorting by rank is now the primary method.
+            const activeTaskSorter = (a, b) => {
+                const priorityA = getPrioritySortValue(a.priority);
+                const priorityB = getPrioritySortValue(b.priority);
+                if (priorityA !== priorityB) return priorityA - priorityB;
+                return a.title.localeCompare(b.title);
+            };
+            const completedTaskSorter = (a, b) => new Date(b.timestamp) - new Date(a.timestamp);
+
+            const grouped = tasks.reduce((acc, task) => {
+                // Ensure 'Completed' group always exists
+                if (!acc['Completed']) {
+                    acc['Completed'] = [];
+                }
+                const key = task.status === TASK_STATUS.DONE ? 'Completed' : (task.project || 'Unassigned');
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(task);
+                return acc;
+            }, {});
+
+            // Sort tasks within each group
+            for (const projectName in grouped) {
+                if (projectName === 'Completed') {
+                    grouped[projectName].sort(completedTaskSorter);
+                } else {
+                    grouped[projectName].sort(activeTaskSorter);
+                }
+            }
+
+            // Sort the project groups themselves, keeping 'Completed' at the bottom
+            return Object.entries(grouped).sort(([a], [b]) => {
+                if (a === 'Completed') return 1;
+                if (b === 'Completed') return -1;
+                return a.localeCompare(b);
+            });
+        }, [tasks]);
+
+        return (
+            <div className="space-y-4">
+                {groupedAndSortedTasks.map(([projectName, tasksInGroup]) => {
+                    const isCollapsed = collapsedProjects[projectName];
+                    const settings = projectSettings[projectName] || {};
+                    const fallbackColors = ['bg-red-900/20', 'bg-yellow-900/20', 'bg-green-900/20', 'bg-blue-900/20', 'bg-indigo-900/20', 'bg-purple-900/20', 'bg-pink-900/20', 'bg-slate-900/20'];
+                    const projectHash = projectName.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+                    const fallbackColor = fallbackColors[Math.abs(projectHash % fallbackColors.length)];
+                    const style = settings.color ? { backgroundColor: settings.color } : {};
+                    const bgColorClass = settings.color ? '' : fallbackColor;
+
+                    return (
+                        <div key={projectName} className={`${bgColorClass} border rounded-lg backdrop-blur-sm transition-all duration-300 ${selectedProjectName === projectName ? 'border-sky-400' : 'border-slate-700/40'} ${projectName === 'Completed' ? 'border-green-700/60' : ''}`} style={style}>
+                            <div className={`flex items-center justify-between w-full text-left text-sm font-bold uppercase tracking-wider pl-2 pr-4 pt-3 pb-2 border-b border-indigo-800/50 transition-colors`}>
+                                <button onClick={() => toggleProjectCollapse(projectName)} title={isCollapsed ? 'Expand project' : 'Collapse project'} className="p-2 rounded-full hover:bg-slate-700/50 text-indigo-300 flex-shrink-0">
+                                    <ChevronDownIcon className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                                </button>
+                                <div onClick={() => onProjectHeaderClick(projectName)} className="flex-grow cursor-pointer hover:bg-white/5 p-2 rounded-md">
+                                    <span className="text-indigo-300 hover:underline">{projectName} ({tasksInGroup.length})</span>
+                                </div>
+                                {projectName !== 'Completed' && <button onClick={() => onAddTask(projectName)} title={`Add task to ${projectName}`} className="p-1 text-sky-300 hover:text-white rounded-full hover:bg-sky-500/30 transition-colors flex-shrink-0 mx-2"><PlusIcon /></button>}
+                                {projectName === 'Completed' && (
+                                    <button onClick={onShowDeleteAllModal} title="Delete All Completed Tasks" className="p-1 text-red-400 hover:text-white rounded-full hover:bg-red-500/30 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" disabled={completedTasksCount === 0}>
+                                        <DeleteIcon />
+                                    </button>
+                                )}
+                            </div>
+                            {!isCollapsed && (
+                                <div className="space-y-2 p-3">
+                                    {tasksInGroup.map(task => <TaskListItem key={task.id} task={task} isSelected={selectedTaskId === task.id} onSelect={onSelectTask} />)}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    });
 
     // --- Main Presentation Component ---
     const App = () => {
         const { 
             tasks, addTask,
             settings, setSettings,
-            taskToComplete, setTaskToComplete, taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
+            taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
             allTags, deleteTask, updateTask, // Core data functions
-            activeTags, setActiveTags,                     // Filter state
-            collapsedTagSwimlanes, toggleSwimlaneCollapse, // Swimlane collapse state & toggle fn
-            collapsedColumns, setCollapsedColumns,          // Fixed column collapse state & setter
-            showCompleted, setShowCompleted, currentTasks   // View state and derived tasks from provider
+            activeTags, setActiveTags,                     // Filter state (now just for projects/priorities)
+            selectedTaskId, setSelectedTaskId,             // Detail view state,
+            collapsedProjects, toggleProjectCollapse
         } = useAppContext();
-
-        const tagsForCurrentView = useMemo(() => {
-            const customTagsSet = new Set();
-            currentTasks.forEach(task => {
-                (task.tags || []).forEach(tag => {
-                    // This check prevents priority display titles from appearing as tag filters.
-                    const isPriorityTitle = PRIORITY_DISPLAY_TITLES_ARRAY.some(
-                        pTitle => pTitle.toLowerCase() === tag.toLowerCase()
-                    );
-                    if (!isPriorityTitle) { customTagsSet.add(tag); }
-                });
-            });
-            return Array.from(customTagsSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-        }, [currentTasks]);
 
         const now = useNow(); // Get current time, updates every second
 
-        // const [collapsedColumns, setCollapsedColumns] = useState({ 'new-tasks': false }); // MOVED to AppProvider
         const [showSettings, setShowSettings] = useState(false);
-        // const [collapsedTagSwimlanes, setCollapsedTagSwimlanes] = useState({}); // Moved to AppProvider
-        const [clockTimezone, setClockTimezone] = useState('EST');
-        const [draggedSwimlane, setDraggedSwimlane] = useState(null); // For swimlane reordering
+        const [clockTimezone, setClockTimezone] = useState('America/New_York');
 
         // State for the summary modal
         const [showSummaryModal, setShowSummaryModal] = useState(false);
         const [summaryText, setSummaryText] = useState('');
         const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
-        const [forceVertical, setForceVertical] = useState(false);
+        const [showNewProjectModal, setShowNewProjectModal] = useState(false);
         const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
-
+        const [selectedProjectName, setSelectedProjectName] = useState(null);
         const windowWidth = useWindowWidth();
-        const prevTasks = usePrevious(currentTasks);
-
-        // --- Layout Calculation based on ACTIVE view content ---
-        // This logic needs to be based on the active tasks, regardless of the current view,
-        // to ensure the layout mode is consistent when switching between Active and Completed.
-        const activeViewLayoutInfo = useMemo(() => {
-            const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE);
-            const swimlanesWithTasks = new Set();
-            activeTasks.forEach(task => {
-                if (task.priority) swimlanesWithTasks.add(PRIORITY_CONFIG[task.priority].title);
-                (task.tags || []).forEach(tag => swimlanesWithTasks.add(tag));
-            });
-            const activeViewSwimlanes = Array.from(swimlanesWithTasks);
-            
-            const unclassifiedActiveTasks = activeTasks.filter(task => {
-                if (task.priority && swimlanesWithTasks.has(PRIORITY_CONFIG[task.priority].title)) return false;
-                if (task.tags && task.tags.some(tag => swimlanesWithTasks.has(tag))) return false;
-                return true;
-            });
-
-            return {
-                swimlanes: activeViewSwimlanes,
-                hasUnclassified: unclassifiedActiveTasks.length > 0
-            };
-        }, [tasks]); // Depends only on the full task list
         // --- Effect for showing release notes once per version ---
+
         useEffect(() => {
             const lastSeenVersion = localStorage.getItem('taiko-app-local-lastSeenVersion');
             if (lastSeenVersion !== CURRENT_APP_VERSION) {
                 setShowReleaseNotesModal(true);
             }
         }, []); // Run only once on mount
+
+        // --- Responsive State ---
+        const isSmallScreen = windowWidth < 768; // Tailwind's `md` breakpoint
+        const showDetailViewOnMobile = isSmallScreen && (selectedTaskId || selectedProjectName);
+        const showListViewOnMobile = isSmallScreen && !showDetailViewOnMobile;
+
 
         const handleCloseReleaseNotes = () => {
             setShowReleaseNotesModal(false);
@@ -1110,14 +1094,6 @@
             };
         }, []); // Empty dependency array ensures this runs only once
 
-        useEffect(() => {
-            // Ensure that when the view switches between active and archived,
-            // or when tasks are modified, the counts for filters are based on the currently displayed tasks.
-            // The `currentTasks` variable already reflects this.
-        }, [currentTasks]);
-
-        const allTasksCount = useMemo(() => currentTasks.length, [currentTasks]);
-
         const activeTasksCount = useMemo(() => tasks.filter(t => t.status !== TASK_STATUS.DONE).length, [tasks]);
 
         const completedTasksCount = useMemo(() => tasks.filter(t => t.status === TASK_STATUS.DONE).length, [tasks]);
@@ -1126,33 +1102,24 @@
             const counts = {};
             DISPLAY_PRIORITY_ORDER.forEach(priorityConstant => {
                 const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
-                counts[displayTitle] = currentTasks.filter(task => task.priority === priorityConstant).length;
+                counts[displayTitle] = tasks.filter(task => task.status !== TASK_STATUS.DONE && task.priority === priorityConstant).length;
             });
             return counts;
-        }, [currentTasks]); // DISPLAY_PRIORITY_ORDER and PRIORITY_CONFIG are stable constants
+        }, [tasks]); // DISPLAY_PRIORITY_ORDER and PRIORITY_CONFIG are stable constants
 
         const customTagFilterCounts = useMemo(() => {
             const counts = {};
-            const customTagsToDisplay = allTags.filter(tag => !PRIORITY_DISPLAY_TITLES_ARRAY.includes(tag));
-            customTagsToDisplay.forEach(tag => {
-                counts[tag] = currentTasks.filter(task => task.tags && task.tags.includes(tag)).length;
+            const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE);
+            allTags.forEach(project => {
+                counts[project] = activeTasks.filter(task => task.project === project).length;
             });
             return counts;
-        }, [currentTasks, allTags]); // PRIORITY_DISPLAY_TITLES_ARRAY is a stable constant
+        }, [tasks, allTags]);
 
         // --- Effect for Reminder Notifications & Sounds ---
         useEffect(() => {
-            if (!('Notification' in window) || Notification.permission !== 'granted') {
-                return; // Notifications not supported or permission not granted
-            }
-
             tasks.forEach(task => {
                 if (task.reminderAt && !task.reminderFired && task.status !== TASK_STATUS.DONE && new Date(task.reminderAt) <= now) {
-                    // console.log(`Firing reminder for task: ${task.title}`); // For debugging
-                    new Notification('Taiko Task Reminder', {
-                        body: `Reminder for: ${task.title}`,
-                        // icon: 'your_icon.png' // Optional: Add an icon URL here
-                    });
                     updateTask(task.id, { reminderFired: true });
 
                     // Play sound based on priority
@@ -1177,401 +1144,275 @@
         const handleConfirmDelete = useCallback(() => {
             if (!taskToDelete) return;
             deleteTask(taskToDelete);
-            setTaskToDelete(null);
+            setTaskToDelete(null); // This is correct
         }, [taskToDelete, deleteTask]);
 
-        const handleConfirmComplete = useCallback(() => {
-            if (!taskToComplete) return;
-            updateTask(taskToComplete.id, { status: TASK_STATUS.DONE, reminderAt: null, reminderFired: false });
-            setTaskToComplete(null);
-        }, [taskToComplete, updateTask]);
+        const handleCreateProject = (projectName) => {
+            if (projectName && projectName.trim()) {
+                const newTask = addTask('New Task', projectName.trim());
+                setSelectedTaskId(newTask.id);
+            }
+            setShowNewProjectModal(false);
+        };
 
         const [showAddTaskModal, setShowAddTaskModal] = useState(false);
         const handleAddTaskFromModal = ({ title, priority, tags }) => {
-            // Add the task first
-            addTask(title, priority, tags); 
+            // This will now handle a single project
+            const newTask = addTask(title, null, priority); 
+            setSelectedTaskId(newTask.id); // Select the newly created task
             setShowAddTaskModal(false); 
         };
         const handleConfirmDeleteAllCompleted = useCallback(() => {
             deleteAllCompletedTasks();
             setShowDeleteAllCompletedModal(false);
         }, [deleteAllCompletedTasks]);
-
-        const handleTimezoneChange = () => setClockTimezone(p => TIMEZONE_ORDER[(TIMEZONE_ORDER.indexOf(p) + 1) % TIMEZONE_ORDER.length]);
+        // The project view has been removed, so we only need the main task view.
+        // The 'currentView' state and toggle function are no longer needed for switching to a project page.
         
-        const handleViewChange = (isCompletedView) => {
-            if (showCompleted === isCompletedView) return; // Avoid unnecessary state updates
-            setShowCompleted(isCompletedView);
-            setActiveTags([]); // Reset filters when changing views
-        };
+        const handleTimezoneChange = (newTimezone) => setClockTimezone(newTimezone);
+        
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
 
         const generateCompletedTasksSummary = useCallback(() => {
-            const completedTasks = tasks.filter(t => t.status === TASK_STATUS.DONE)
-                                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by completion time
-            
-            const timeZone = TIMEZONE_MAP[clockTimezone] || 'UTC';
             const localeOptions = {
                 year: 'numeric', month: 'numeric', day: 'numeric',
                 hour: 'numeric', minute: 'numeric', second: 'numeric',
                 hour12: true,
-                timeZone: timeZone
+                timeZone: clockTimezone
             };
 
-            
             let summary;
-            if (completedTasks.length === 0) {
-                summary = "No tasks have been completed yet.";
+
+            if (tasks.length === 0) {
+                summary = "No tasks to summarize.";
             } else {
-                summary = `--- Completed Tasks Summary ---\n`;
-                summary += `Total Completed: ${completedTasks.length}\n`;
-                summary += `Generated on: ${new Date().toLocaleString('en-US', localeOptions)} ${clockTimezone}\n\n`;
-                summary += "========================================\n\n";
+                summary = `--- Handover Report ---\n`;
+                summary += `Generated on: ${new Date().toLocaleString('en-US', localeOptions)} (${TIMEZONES.find(tz => tz.value === clockTimezone)?.label || clockTimezone})\n\n`;
 
-                completedTasks.forEach(task => {
-                    summary += `Task: ${task.title}\n`;
-                    
-                    const priorityTitle = PRIORITY_CONFIG[task.priority]?.title || PRIORITY_CONFIG.null.title;
-                    summary += `Priority: ${priorityTitle}\n`;
-                    
-                    summary += `Completed On: ${new Date(task.timestamp).toLocaleString('en-US', localeOptions)} ${clockTimezone}\n`;
+                const inProgressTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE).sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority));
+                const completedTasks = tasks.filter(t => t.status === TASK_STATUS.DONE).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-                    if (task.notes && task.notes.trim()) {
-                        summary += `\n  Notes:\n`;
-                        summary += `    ${task.notes.trim().replace(/\n/g, '\n    ')}\n`; // Indent notes
-                    } else {
-                        summary += `\n  Notes:\n    No notes.\n`;
-                    }
+                const groupTasksByProject = (tasksToGroup) => {
+                    const grouped = tasksToGroup.reduce((acc, task) => {
+                        const project = task.project || 'Unassigned';
+                        if (!acc[project]) {
+                            acc[project] = [];
+                        }
+                        acc[project].push(task);
+                        return acc;
+                    }, {});
+                    // Sort projects alphabetically, keeping 'Unassigned' first if it exists
+                    return Object.entries(grouped).sort(([a], [b]) => {
+                        if (a === 'Unassigned') return -1;
+                        if (b === 'Unassigned') return 1;
+                        return a.localeCompare(b);
+                    });
+                };
 
-                    const validSubtasks = (task.checklist || []).filter(item => item.text && item.text.trim() !== '');
+                if (inProgressTasks.length > 0) {
+                    summary += `========================================\n`;
+                    summary += `IN PROGRESS TASKS (${inProgressTasks.length})\n`;
+                    const inProgressByProject = groupTasksByProject(inProgressTasks);
 
-                    // Only include subtasks that were actually completed if we're showing completed tasks
-                    // Or all subtasks if we're showing active tasks
-                    const subtasksToSummarize = showCompleted ? validSubtasks.filter(item => item.completed) : validSubtasks;
-
-                    if (subtasksToSummarize.length > 0) {
-                        summary += `\n  Subtasks:\n`;
-                        subtasksToSummarize.forEach(item => {
-                            let subtaskLine = `    [${item.completed ? 'x' : ' '}] ${item.text}`;
-                            if (item.completed && item.completedAt) {
-                                subtaskLine += ` (Completed: ${new Date(item.completedAt).toLocaleString('en-US', localeOptions)})`;
+                    inProgressByProject.forEach(([projectName, projectTasks]) => {
+                        summary += `\n--- Project: ${projectName} (${projectTasks.length}) ---\n`;
+                        projectTasks.forEach(task => {
+                            summary += `\n  - ${task.title}\n`;
+                            if (task.notes && task.notes.trim()) {
+                                summary += `    Notes: ${task.notes.trim().replace(/\n/g, '\n           ')}\n`;
                             }
-                            summary += `${subtaskLine}\n`;
+                            const allSubtasks = (task.checklist || []).filter(item => item.text.trim());
+                            if (allSubtasks.length > 0) {
+                                allSubtasks.forEach(subtask => {
+                                    let subtaskLine = `    ${subtask.completed ? '[x]' : '[ ]'} ${subtask.text}`;
+                                    if (subtask.completed && subtask.completedAt) {
+                                        subtaskLine += ` (on: ${new Date(subtask.completedAt).toLocaleString('en-US', localeOptions)})`;
+                                    }
+                                    summary += `${subtaskLine}\n`;
+                                });
+                            }
                         });
-                    } else {
-                        summary += `\n  Subtasks:\n    No subtasks.\n`;
-                    }
+                    });
+                }
 
-                    summary += "\n========================================\n\n";
-                });
+                if (completedTasks.length > 0) {
+                    summary += `\n========================================\n`;
+                    summary += `COMPLETED TASKS (${completedTasks.length})\n`;
+                    const completedByProject = groupTasksByProject(completedTasks);
+
+                    completedByProject.forEach(([projectName, projectTasks]) => {
+                        summary += `\n--- Project: ${projectName} (${projectTasks.length}) ---\n`;
+                        projectTasks.forEach(task => {
+                            summary += `\n  - ${task.title} - Completed at ${new Date(task.timestamp).toLocaleString('en-US', localeOptions)}\n`;
+                            if (task.notes && task.notes.trim()) {
+                                summary += `    Notes: ${task.notes.trim().replace(/\n/g, '\n           ')}\n`;
+                            }
+                            const completedSubtasks = (task.checklist || []).filter(item => item.completed && item.text.trim());
+                            if (completedSubtasks.length > 0) {
+                                completedSubtasks.forEach(subtask => {
+                                    summary += `      - ${subtask.text}\n`;
+                                });
+                            }
+                        });
+                    });
+                }
             }
             setSummaryText(summary);
             setShowSummaryModal(true);
-        }, [tasks, clockTimezone]); // Dependency on `tasks` and `clockTimezone` state
+        }, [tasks, clockTimezone]);
 
         const handleTagFilterClick = (tag) => {
-            const isPriorityTag = PRIORITY_TITLE_TO_CONSTANT_MAP[tag];
-
             setActiveTags(prevActiveTags => {
-                if (isPriorityTag) {
-                    // Clicked a priority filter.
-                    // If it's already the active filter, clear all filters.
-                    // Otherwise, make it the ONLY active filter.
-                    if (prevActiveTags.length === 1 && prevActiveTags[0] === tag) {
-                        return [];
-                    } else {
-                        return [tag];
-                    }
+                // If the clicked tag is already the active one, clear the filter.
+                if (prevActiveTags.length === 1 && prevActiveTags[0] === tag) {
+                    return [];
                 } else {
-                    // Clicked a custom tag filter.
-                    // Remove any active priority filters.
-                    const customTagsOnly = prevActiveTags.filter(t => !PRIORITY_TITLE_TO_CONSTANT_MAP[t]);
-                    
-                    // Now, toggle the clicked custom tag within that list.
-                    if (customTagsOnly.includes(tag)) {
-                        return customTagsOnly.filter(t => t !== tag);
-                    } else {
-                        return [...customTagsOnly, tag];
-                    }
+                    // Otherwise, make the clicked tag the only active filter.
+                    return [tag];
                 }
             });
+};
+
+const handleProjectHeaderClick = (projectName) => {
+    // When a project header is clicked, show all its tasks and deselect any single task.
+    setSelectedProjectName(projectName);
+    setSelectedTaskId(null);
         };
 
         const clearTagFilter = () => setActiveTags([]);
 
         const tasksMatchingActiveFilters = useMemo(() => {
-            if (activeTags.length === 0) return currentTasks;
-            return currentTasks.filter(task =>
+            if (activeTags.length === 0) return tasks;
+            return tasks.filter(task =>
                 activeTags.some(activeTag => {
-                    const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag];
-                    return priorityConstant ? task.priority === priorityConstant : (task.tags && task.tags.includes(activeTag))
+                    const priorityConstant = PRIORITY_TITLE_TO_CONSTANT_MAP[activeTag]; // This part handles priority filters
+                    return priorityConstant ? task.priority === priorityConstant : task.project === activeTag;
                 })
             );
-        }, [currentTasks, activeTags]);
+        }, [tasks, activeTags]);
         // const handleDropSwimlane = (targetSwimlaneName) => {
-        //     if (!draggedSwimlane || draggedSwimlane === targetSwimlaneName) {
-        //         setDraggedSwimlane(null);
-        //         return;
-        //     }
-        //     const newActiveSwimlanes = [...activeSwimlanes];
-        //     const draggedIndex = newActiveSwimlanes.indexOf(draggedSwimlane);
-        //     const targetIndex = newActiveSwimlanes.indexOf(targetSwimlaneName);
-        //
-        //     newActiveSwimlanes.splice(draggedIndex, 1); // Remove dragged item
-        //     newActiveSwimlanes.splice(targetIndex, 0, draggedSwimlane); // Insert at new position
-        //     setActiveSwimlanes(newActiveSwimlanes);
-        //     setDraggedSwimlane(null);
-        // };
-        // --- Swimlane Drag and Drop Handlers ---
-        const handleDragStartSwimlane = (e, swimlaneName) => {
-            setDraggedSwimlane(swimlaneName);
-            e.dataTransfer.effectAllowed = 'move';
-            // Optional: Add a class to the body or a specific element for global drag styling
-        };
-
-        const handleDragOverSwimlane = (e) => {
-            e.preventDefault(); // Necessary to allow dropping
-        };
-
-        const { swimlaneTasks, unclassifiedTasks, activeSwimlanes } = useMemo(() => {
-            const st = {};
-            const ut = []; // unclassifiedTasks
-
-            const taskSorter = (a, b) => {
-                if (showCompleted) {
-                    return new Date(b.timestamp) - new Date(a.timestamp); // Newest completed first
-                } else {
-                    return (a.rank ?? Infinity) - (b.rank ?? Infinity); 
-                }
-            };
-
-            // Determine active swimlanes based on tasks that match filters
-            const swimlanesWithTasks = new Set();
-            tasksMatchingActiveFilters.forEach(task => {
-                if (task.priority) {
-                    swimlanesWithTasks.add(PRIORITY_CONFIG[task.priority].title);
-                }
-                (task.tags || []).forEach(tag => swimlanesWithTasks.add(tag));
-            });
-            // This defines the swimlanes to be rendered.
-            const activeSwimlanes = Array.from(swimlanesWithTasks).sort();
-
-            for (const task of tasksMatchingActiveFilters) {
-                let inSwimlane = false;
-                
-                for (const swimlaneName of activeSwimlanes) { 
-                    const isPrioritySwimlane = PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
-                    let matchesSwimlane = false;
-
-                    if (isPrioritySwimlane) {
-                        matchesSwimlane = task.priority === PRIORITY_TITLE_TO_CONSTANT_MAP[swimlaneName];
-                    } else {
-                        matchesSwimlane = task.tags && task.tags.includes(swimlaneName);
-                    }
-
-                    if (matchesSwimlane) {
-                        if (!st[swimlaneName]) st[swimlaneName] = [];
-                        st[swimlaneName].push(task);
-                        inSwimlane = true;
-                        break; // Task assigned, move to the next task
-                    }
-                }
-
-                if (!inSwimlane) {
-                    ut.push(task);
-                }
-            }
-
-            // Sort unclassified tasks
-            ut.sort(taskSorter);
-
-            // Sort tasks within each swimlane
-            for (const swimlaneName in st) {
-                st[swimlaneName].sort(taskSorter);
-            }
-            return { swimlaneTasks: st, unclassifiedTasks: ut, activeSwimlanes };
-        }, [tasksMatchingActiveFilters, showCompleted, PRIORITY_TITLE_TO_CONSTANT_MAP]);
         
-        const mainContainerRef = useRef(null);
-        
-        // This effect checks if the horizontal columns overflow their container.
-        // If they do, it forces a vertical layout.
-        useEffect(() => {
-            if (mainContainerRef.current && windowWidth >= 768) {
-                const containerWidth = mainContainerRef.current.clientWidth;
-                
-                // Determine how many columns would be rendered in the ACTIVE view
-                let columnCount = 0;
-                // The "Unsorted" column appears if there are unclassified tasks, or if no filters are active.
-                if (activeViewLayoutInfo.hasUnclassified || (activeTags.length === 0 && activeViewLayoutInfo.swimlanes.length === 0)) {
-                    columnCount++;
-                }
-                // Add the count of swimlanes that will be rendered.
-                columnCount += activeViewLayoutInfo.swimlanes.length;
-                const columnWidth = 384; // w-96 is 24rem = 384px
-                const gapWidth = 16; // space-x-4 is 1rem = 16px
-                const totalRequiredWidth = (columnCount * columnWidth) + (Math.max(0, columnCount - 1) * gapWidth);
+        const selectedTask = useMemo(() => {
+            return tasks.find(t => t.id === selectedTaskId);
+        }, [tasks, selectedTaskId]);
 
-                setForceVertical(totalRequiredWidth > containerWidth);
-            } else {
-                setForceVertical(false); // Don't force vertical on small screens, it's already handled
+        const tasksForProjectView = useMemo(() => {
+            if (!selectedProjectName) return [];
+            if (selectedProjectName === 'Completed') {
+                // Special case for the "Completed" virtual project, sorted by completion time
+                return tasks.filter(t => t.status === TASK_STATUS.DONE)
+                            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             }
-        }, [activeViewLayoutInfo, windowWidth, activeTags]); // Re-check when active view content or window size change
+            // For all other projects, find tasks by their assigned project name
+            // and sort them by priority.
+            return tasks.filter(t => (t.project || 'Unassigned') === selectedProjectName && t.status !== TASK_STATUS.DONE)
+                        .sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority));
+        }, [tasks, selectedProjectName]);
 
-        // The layout mode is determined by the active view's state (forceVertical) or screen size.
-        // This single variable controls the layout for BOTH the active and completed views for consistency.
-        const isEffectiveVerticalLayout = forceVertical || windowWidth < 768;
-        const mainLayoutClasses = isEffectiveVerticalLayout ? 'flex-col space-y-4' : 'flex-row space-x-4 items-start';
-        const backgroundOverlayClass = showCompleted ? 'bg-green-900/10' : '';
-
-        // --- Effect to control animation based on layout ---
-        useEffect(() => {
-            // Dispatch an event to the global animation script when the layout changes
-            const event = new CustomEvent('layoutChange', { detail: { isVertical: isEffectiveVerticalLayout } });
-            window.dispatchEvent(event);
-        }, [isEffectiveVerticalLayout]);
-        
         return (
             <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: 'transparent' }}>
 
-                {taskToComplete && <CompleteConfirmationModal task={taskToComplete} onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} />}
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
-                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
                 {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
+                {showNewProjectModal && <NewProjectModal onAdd={handleCreateProject} onCancel={() => setShowNewProjectModal(false)} />}
+                {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
                 {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
                 
-                <header className="sticky top-0 z-10 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+                <header className="sticky top-0 z-20 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
                     {/* --- Left Side: Logo, Title, Toolbar --- */}
                     <div className="flex items-center gap-4">
-                        <TaikoLogo />
-                        <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
-                        <HeaderToolbar isSmallScreen={windowWidth < 768} onShowSettings={() => setShowSettings(true)} onGenerateSummary={generateCompletedTasksSummary} onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} showDeleteAllButton={showCompleted && completedTasksCount > 0} />
+                        {showDetailViewOnMobile ? (
+                            <button 
+                                onClick={() => { setSelectedTaskId(null); setSelectedProjectName(null); }}
+                                className="text-sky-300 hover:bg-sky-500/20 p-2 rounded-md flex items-center gap-2"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                                <span className="font-semibold">Back</span>
+                            </button>
+                        ) : (
+                            <>
+                                <TaikoLogo />
+                                <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
+                            </>
+                        )}
+                        <HeaderToolbar isSmallScreen={windowWidth < 768} onShowSettings={() => setShowSettings(true)} onGenerateSummary={generateCompletedTasksSummary} onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} showDeleteAllButton={completedTasksCount > 0} />
                     </div>
 
                     {/* --- Right Side: Add Task & Clock --- */}
-                    <div className="flex items-center">
+                    <div className={`flex items-center ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                         <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
                     </div>
                 </header>
-                
-                <div className="px-4 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-4">
+                <div className={`px-4 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-4 ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                     <FilterToolbar
-                        isSmallScreen={windowWidth < 768}
-                        showCompleted={showCompleted}
                         activeTasksCount={activeTasksCount}
                         completedTasksCount={completedTasksCount}
                         activeTags={activeTags}
-                        allTasksCount={allTasksCount}
                         priorityFilterCounts={priorityFilterCounts}
-                        tagsForCurrentView={tagsForCurrentView}
+                        tagsForCurrentView={allTags}
                         customTagFilterCounts={customTagFilterCounts}
-                        onViewChange={handleViewChange}
+                        onShowNewProjectModal={() => setShowNewProjectModal(true)}
                         onClearFilters={clearTagFilter}
                         onTagFilterClick={handleTagFilterClick}
                     />
-                    <HeaderQuickAdd onAddTask={(title) => addTask(title, null, [])} />
                 </div>
+                <main className={`flex-grow p-4 flex flex-col md:flex-row gap-4 overflow-hidden transition-all duration-300`}>
+                            {/* Left Pane: Task List */}
+                            <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                                <TaskList
+                                    tasks={tasksMatchingActiveFilters}
+                                    selectedTaskId={selectedTaskId}
+                                    onSelectTask={(id) => { setSelectedTaskId(id); setSelectedProjectName(null); }} // This is correct
+                                    clockTimezone={clockTimezone}
+                                    onProjectHeaderClick={handleProjectHeaderClick}
+                                    selectedProjectName={selectedProjectName}
+                                    onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} // Pass down the modal toggle
+                                    onAddTask={(projectName) => { 
+                                        addTask('New Task', projectName); 
+                                        // Switch view to the project
+                                        setSelectedProjectName(projectName);
+                                        setSelectedTaskId(null);
+                                        // Ensure the project is expanded
+                                        if (collapsedProjects[projectName]) toggleProjectCollapse(projectName);
+                                    }}
+                                    completedTasksCount={completedTasksCount}
+                                />
+                            </div>
 
-                <main ref={mainContainerRef} className={`flex-grow p-4 flex overflow-auto transition-all duration-300 ${mainLayoutClasses} ${backgroundOverlayClass} ${!isEffectiveVerticalLayout ? 'overflow-x-auto' : 'overflow-y-auto'}`}>
-                    {showCompleted ? (
-                        <PriorityColumn
-                            key="completed-column"
-                            titleOverride="Completed Tasks"
-                            priority={null}
-                            tasks={tasksMatchingActiveFilters}
-                            allTasks={tasks}
-                            isCollapsed={false}
-                            onToggleCollapse={() => {}} // No-op for completed view as it's not collapsible
-                            showCompleted={showCompleted}
-                            isVerticalLayout={isEffectiveVerticalLayout}
-                            clockTimezone={clockTimezone}
-                            isSwimlane={false}
-                        />
-                    ) : (
-                        <>
-                            {/* --- "Unsorted" Column --- */}
-                            {(() => { // This column displays unclassifiedTasks
-                                const unsortedTasksToDisplay = unclassifiedTasks;
-                                const isEffectivelyCollapsedUnsorted = (settings.autoCollapse && unsortedTasksToDisplay.length === 0) ? true : (collapsedColumns['unsorted'] || false);
-                                
-                                // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
-                                const shouldRenderUnsortedColumn = unsortedTasksToDisplay.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedUnsorted);
-
-                                if (shouldRenderUnsortedColumn) {
-                                    return (
-                                        <PriorityColumn
-                                            key="unsorted-column"
-                                            titleOverride="Unsorted"
-                                            priority={null} // Base styling on unprioritized, but title is overridden
-                                            tasks={unsortedTasksToDisplay}
-                                            allTasks={tasks}
-                                            isCollapsed={isEffectivelyCollapsedUnsorted}
-                                            onToggleCollapse={() => setCollapsedColumns(p => ({ ...p, 'unsorted': !p['unsorted'] }))}
-                                            showCompleted={showCompleted}
-                                            isVerticalLayout={isEffectiveVerticalLayout}
-                                            clockTimezone={clockTimezone}
-                                            isSwimlane={false} // Indicate this is a primary column
-                                        /> );
-                                } return null;
-                            })()}
-                            {activeSwimlanes.map(item => { // Iterate over all active swimlanes (tags or priority display titles)
-                                const tasksForThisSwimlane = swimlaneTasks[item] || [];
-                                const isManuallyCollapsed = collapsedTagSwimlanes[item] || false;
-                                const isEffectivelyCollapsedTag = (settings.autoCollapse && tasksForThisSwimlane.length === 0) ? true : isManuallyCollapsed;
-
-                                // Render if tasks exist, OR if no filters are active and it's not effectively collapsed
-                                const shouldRenderTagColumn = tasksForThisSwimlane.length > 0 || (activeTags.length === 0 && !isEffectivelyCollapsedTag);
-
-                                if (!shouldRenderTagColumn) {
-                                    return null; // Hide the column if filters make it empty, or if no filters and it's effectively collapsed
-                                }
-
-                                // All active swimlanes (including those named "High", "Medium", "Low")
-                                // will now be rendered by TagColumn.
-                                // The "Unsorted" column is handled separately above.
-                                return (
-                                    <div
-                                        key={item}
-                                        draggable={!isEffectiveVerticalLayout} // Only allow drag in horizontal mode
-                                        // onDragStart={(e) => !isEffectiveVerticalLayout && handleDragStartSwimlane(e, item)}
-                                        // onDragOver={!isEffectiveVerticalLayout ? handleDragOverSwimlane : undefined}
-                                        // onDrop={() => !isEffectiveVerticalLayout && handleDropSwimlane(item)}
-                                        className={`transition-opacity duration-200 ${draggedSwimlane === item ? 'opacity-30' : 'opacity-100'} ${isEffectiveVerticalLayout ? 'w-full' : 'flex-shrink-0 w-96'}`}
-                                    >
-                                        <TagColumn 
-                                            tag={item} // 'item' is the swimlane name, e.g., "ProjectX" or "High"
-                                            tasks={tasksForThisSwimlane} 
-                                            clockTimezone={clockTimezone}
-                                            isCollapsed={isEffectivelyCollapsedTag}
-                                            onToggleCollapse={() => toggleSwimlaneCollapse(item)}
-                                            isVerticalLayout={isEffectiveVerticalLayout}
-                                            isBeingDragged={draggedSwimlane === item}
-                                        />
+                            {/* Right Pane: Task Details */}
+                            <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${showListViewOnMobile ? 'hidden' : ''}`}>
+                                {selectedProjectName ? (
+                                    <div className="space-y-4">
+                                        {tasksForProjectView.length > 0 ? (
+                                            tasksForProjectView.map(task => <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />)
+                                        ) : (
+                                            <p className="text-slate-500 px-2">No tasks in this project.</p>
+                                        )}
                                     </div>
-                                );
-                            })}
-                        </>
-                    )}
-                </main>
+                                ) : selectedTask ? (
+                                    <MemoizedTaskCard key={selectedTask.id} task={selectedTask} clockTimezone={clockTimezone} />
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-slate-500 text-xl">
+                                        Select a task or a project to see details
+                                    </div>
+                                )}
+                            </div>
+                        </main>
                 <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
             </div>
         );
     };
-
     // --- Column & Modal Components ---
     const FilterToolbar = React.memo(({
-        isSmallScreen,
-        showCompleted,
         activeTasksCount,
         completedTasksCount,
         activeTags,
-        allTasksCount,
         priorityFilterCounts,
         tagsForCurrentView,
         customTagFilterCounts,
-        onViewChange,
+        onShowNewProjectModal,
         onClearFilters,
         onTagFilterClick
     }) => {
@@ -1588,62 +1429,42 @@
             return () => document.removeEventListener("mousedown", handleClickOutside);
         }, [filterMenuRef]);
 
-        const secondaryFilters = (
-            <>
-                <button onClick={onClearFilters} title="Show all tasks (clear tag filters)" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.length === 0 ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>All <span className="opacity-80"> ({allTasksCount})</span></button>
-                {DISPLAY_PRIORITY_ORDER.map(priorityConstant => {
-                    const displayTitle = PRIORITY_CONFIG[priorityConstant].title;
-                    return (
-                        <button key={displayTitle} title={`Filter by priority: ${displayTitle}`} onClick={() => onTagFilterClick(displayTitle)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(displayTitle) ? `${PRIORITY_CONFIG[priorityConstant].bgColor} text-white` : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                            {displayTitle} <span className="opacity-80">({priorityFilterCounts[displayTitle] || 0})</span>
-                        </button>
-                    );
-                })}
-                {tagsForCurrentView.length > 0 && <div className="border-l border-slate-700 h-5"></div>}
-                {tagsForCurrentView.map(tag => (
-                    <button key={tag} title={`Filter by custom tag: ${tag}`} onClick={() => onTagFilterClick(tag)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTags.includes(tag) ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                        {tag} <span className="opacity-80"> ({customTagFilterCounts[tag] || 0})</span>
-                    </button>
-                ))}
-            </>
-        );
-
-        const mobileFilterButtonText = activeTags.length > 0 ? `Filtered: ${activeTags.join(', ')}` : 'Filter by...';
+        const filterButtonText = activeTags.length > 0 ? `Filtered: ${activeTags.join(', ')}` : 'Filter by...';
 
         return (
             <div className="flex items-center space-x-2 flex-wrap">
-                {/* --- Primary View Tabs (Always Visible) --- */}
-                <button onClick={() => onViewChange(false)} title="Show active tasks" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${!showCompleted ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Active <span className="opacity-80">({activeTasksCount})</span></button>
-                <button onClick={() => onViewChange(true)} title="Show completed tasks" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${showCompleted ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>Completed <span className="opacity-80">({completedTasksCount})</span></button>
-                <div className="border-l border-slate-700 h-5 mx-2"></div>
-
-                {isSmallScreen ? (
-                    <div className="relative" ref={filterMenuRef}>
-                        <button onClick={() => setIsFilterMenuOpen(p => !p)} title="Select a filter" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${activeTags.length > 0 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
-                            {mobileFilterButtonText}
-                            <ChevronDownIcon className={`h-4 w-4 transition-transform ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isFilterMenuOpen && (
-                            <div className="absolute left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-md shadow-lg py-1 z-20">
-                                <button onClick={() => { onClearFilters(); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.length === 0 ? 'text-white bg-sky-600' : 'text-slate-200 hover:bg-slate-700'}`}>All ({allTasksCount})</button>
-                                <div className="my-1 border-t border-slate-700"></div>
-                                {DISPLAY_PRIORITY_ORDER.map(pConst => {
-                                    const title = PRIORITY_CONFIG[pConst].title;
-                                    return <button key={title} onClick={() => { onTagFilterClick(title); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.includes(title) ? `text-white ${PRIORITY_CONFIG[pConst].bgColor}` : 'text-slate-200 hover:bg-slate-700'}`}>{title} ({priorityFilterCounts[title] || 0})</button>
-                                })}
-                                {tagsForCurrentView.length > 0 && <div className="my-1 border-t border-slate-700"></div>}
-                                {tagsForCurrentView.map(tag => (
-                                    <button key={tag} onClick={() => { onTagFilterClick(tag); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.includes(tag) ? 'text-white bg-indigo-600' : 'text-slate-200 hover:bg-slate-700'}`}>{tag} ({customTagFilterCounts[tag] || 0})</button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <>
-                        {/* --- Secondary Filter Tabs (Desktop) --- */}
-                        {secondaryFilters}
-                    </>
-                )}
+                {/* --- New Project Button --- */}
+                <button 
+                    onClick={onShowNewProjectModal}
+                    title="Create a new project" 
+                    className="px-3 py-1 text-sm font-medium rounded-md transition-colors text-sky-300 bg-sky-600/30 hover:bg-sky-600/50 border border-sky-600/80 flex items-center gap-1.5"><PlusIcon /> New Project</button>
+                {/* --- Unified Filter Dropdown --- */}
+                <div className="relative" ref={filterMenuRef}>
+                    <button onClick={() => setIsFilterMenuOpen(p => !p)} title="Select a filter" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${activeTags.length > 0 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/50'}`}>
+                        {filterButtonText}
+                        <ChevronDownIcon className={`h-4 w-4 transition-transform ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isFilterMenuOpen && (
+                        <div className="absolute left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-md shadow-lg py-1 z-20">
+                            <button onClick={() => { onClearFilters(); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.length === 0 ? 'text-white bg-sky-600' : 'text-slate-200 hover:bg-slate-700'}`}>All Active ({activeTasksCount})</button>
+                            <div className="my-1 border-t border-slate-700"></div>
+                            <div className="px-4 pt-2 pb-1 text-xs font-semibold text-slate-400">By Priority</div>
+                            {DISPLAY_PRIORITY_ORDER.map(pConst => {
+                                const pTitle = PRIORITY_CONFIG[pConst].title;
+                                return <button key={pTitle} onClick={() => { onTagFilterClick(pTitle); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.includes(pTitle) ? `text-white ${PRIORITY_CONFIG[pConst].bgColor}` : 'text-slate-200 hover:bg-slate-700'}`}>{pTitle} ({priorityFilterCounts[pTitle] || 0})</button>
+                            })}
+                            {tagsForCurrentView.length > 0 && (
+                                <>
+                                    <div className="my-1 border-t border-slate-700"></div>
+                                    <div className="px-4 pt-2 pb-1 text-xs font-semibold text-slate-400">By Project</div>
+                                    {tagsForCurrentView.map(tag => (
+                                        <button key={tag} onClick={() => { onTagFilterClick(tag); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2 text-sm ${activeTags.includes(tag) ? 'text-white bg-indigo-600' : 'text-slate-200 hover:bg-slate-700'}`}>{tag} ({customTagFilterCounts[tag] || 0})</button>
+                                    ))}
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         );
     });
@@ -1690,207 +1511,37 @@
                 <button onClick={onShowSettings} title="Settings" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
                 <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" title="Report Issue or Submit Feedback" target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><BugIcon /></a>
                 <button onClick={onGenerateSummary} title="Generate Summary of Completed Tasks" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><DocumentTextIcon /></button>
-                {showDeleteAllButton && <button onClick={onShowDeleteAllModal} title="Delete All Completed Tasks" className="p-2 text-red-400 hover:text-white rounded-full hover:bg-red-500 transition-colors"><DeleteIcon /></button>}
             </div>
         );
     });
-    const PriorityColumn = React.memo(({ priority, tasks, isCollapsed, onToggleCollapse, showCompleted, isVerticalLayout, clockTimezone, isSwimlane = false, titleOverride = null }) => {
-        const { addTask } = useAppContext();
-        const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
-
-        const columnLayoutClasses = isVerticalLayout ? 'w-full' : 'flex-shrink-0 w-96 h-full';
-        const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.null; // 'priority' can be PRIORITIES.LOW or null
-
-        let displayTitleText = titleOverride || config.title;
-        if (isSwimlane && !titleOverride && config.title !== PRIORITY_CONFIG.null.title) {
-            displayTitleText = `${config.title} Priority`;
-        } // "Unsorted" will use titleOverride
-
-        const headerColorClass = titleOverride ? (isSwimlane ? 'text-slate-300' : 'text-slate-200') : config.color; // Generic color for "New Tasks", specific for priorities
-
-
-        const headerContent = (
-            <div className="flex items-center justify-between w-full">
-                <span className="truncate flex-grow">{displayTitleText} ({tasks.length})</span>
-                {isVerticalLayout && ( // Only show chevron in vertical mode
-                    <ChevronDownIcon className={`transform transition-transform duration-200 flex-shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                )}
-            </div>
-        );
-        
-
-        return (
-            <div className={`flex flex-col rounded-lg ${columnLayoutClasses} ${isSwimlane ? 'bg-slate-900/40 border border-slate-700/60' : (titleOverride ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-slate-900/30')}`}>
-                {isVerticalLayout ? ( // Clickable header for vertical layout
-                    <button 
-                        onClick={onToggleCollapse} 
-                        title={isCollapsed ? "Expand column" : "Collapse column"}
-                        className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70 hover:bg-slate-700/70' : (titleOverride ? 'bg-slate-700/60 hover:bg-slate-600/60' : 'hover:bg-slate-700/50')} flex-shrink-0 transition-colors`}
-                    >
-                        <div className="flex-grow min-w-0">{headerContent}</div>
-                    </button>
-                ) : ( // Static header for horizontal layout
-                    <div className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg ${headerColorClass} ${isSwimlane ? 'bg-slate-800/70' : (titleOverride ? 'bg-slate-700/60' : 'bg-slate-900/60')} flex-shrink-0`}>
-                        <div className="flex-grow min-w-0">{headerContent}</div>
-                    </div>
-                )}
-                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
-                    ${isVerticalLayout ? 
-                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'max-h-full opacity-100 flex flex-col space-y-4') :
-                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4' // Horizontal view remains the same
-                    }
-                `}>
-                    {(!isVerticalLayout || !isCollapsed) && tasks.map((task) => (
-                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />
-                    ))}
-                </div>
-            </div>
-        );
-    });
-
-    const TagColumn = React.memo(({ tag, tasks, clockTimezone, isCollapsed, onToggleCollapse, isVerticalLayout, isBeingDragged }) => {
-        const { settings } = useAppContext();
-        const { addTask } = useAppContext();
-        const [showQuickAdd, setShowQuickAdd] = useState(false); // State to show/hide quick add input
-
-        const columnLayoutClasses = isVerticalLayout ? 'w-full' : 'w-96 h-full';
-        const dragStyle = isBeingDragged ? 'border-dashed border-sky-500' : 'border-indigo-800/50';
-
-        const headerContent = (
-            <div className="flex items-center justify-between w-full">
-                <span className="truncate flex-grow">{tag} ({tasks.length})</span>
-                {isVerticalLayout && <ChevronDownIcon className={`transform transition-transform duration-200 flex-shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />}
-            </div>
-        );
-
-        return (
-            <div className={`flex flex-col overflow-x-hidden bg-indigo-900/20 backdrop-blur-sm border rounded-lg ${columnLayoutClasses} ${dragStyle} transition-all`}>
-                {isVerticalLayout ? ( // Clickable header for vertical layout
-                    <button
-                        onClick={onToggleCollapse}
-                        title={isCollapsed ? "Expand column" : "Collapse column"}
-                        className={`flex items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 hover:bg-slate-800/80 flex-shrink-0 transition-colors ${isBeingDragged ? 'cursor-grabbing' : 'cursor-pointer'}`}
-                    >
-                        <div className="flex-grow min-w-0">{headerContent}</div>
-                    </button>
-                ) : (
-                    <div className={`flex justify-between items-center w-full text-left text-lg font-bold p-2 rounded-t-lg text-indigo-300 bg-slate-900/60 flex-shrink-0 ${isBeingDragged ? 'cursor-grabbing' : 'cursor-grab'}`}>
-                        <div className="flex-grow min-w-0">{headerContent}</div>
-                    </div>
-                )}
-                <div className={`flex-grow p-2 transition-all duration-300 ease-in-out
-                    ${isVerticalLayout ?
-                        (isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'max-h-full opacity-100 flex flex-col space-y-4') :
-                        'max-h-full opacity-100 overflow-y-auto flex flex-col space-y-4' // Horizontal view remains the same
-                    }
-                `}>
-                    {(!isVerticalLayout || !isCollapsed) && tasks.map(task => ( 
-                        <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />
-                    ))}
-                </div>
-            </div>
-        );
-    });
-
     const Footer = React.memo(({ onShowReleaseNotes }) => {
+        const EarthIcon = () => (
+            <svg viewBox="0 0 100 100" className="absolute bottom-0 left-1/2 -translate-x-1/2 h-48 w-48 text-slate-700/50 opacity-30 -z-10" fill="none" stroke="currentColor" strokeWidth="0.5">
+                <circle cx="50" cy="50" r="48"/>
+                <ellipse cx="50" cy="50" rx="48" ry="20"/>
+                <ellipse cx="50" cy="50" rx="48" ry="40" transform="rotate(90 50 50)"/>
+                <path d="M 10,60 C 20,75 40,80 50,70 S 70,50 85,55"/>
+                <path d="M 5,40 C 25,45 40,30 55,35 S 80,50 95,45"/>
+                <path d="M 20,20 C 30,35 50,35 60,25 S 80,20 85,30"/>
+            </svg>
+        );
         return (
-            <footer className="bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40 flex-shrink-0">
+            <footer className="relative bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40 flex-shrink-0 overflow-hidden">
+                <EarthIcon />
                 <div className="flex items-center justify-center space-x-4">
                     <div className="flex items-center justify-center space-x-1.5">
                         <span>Courtesy of</span>
                         <a href="https://github.com/closedloopchaos" target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sky-400 hover:text-sky-300 font-semibold hover:underline">
-                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-                            </svg>
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
                             closedloopchaos
                         </a>
                     </div>
                     <div className="border-l border-slate-600 h-5"></div>
-                    <button onClick={onShowReleaseNotes} className="text-sky-400 hover:text-sky-300 font-semibold hover:underline">
-                        Release Notes (v{CURRENT_APP_VERSION})
-                    </button>
+                    <button onClick={onShowReleaseNotes} className="text-sky-400 hover:text-sky-300 font-semibold hover:underline">Release Notes (v{CURRENT_APP_VERSION})</button>
                 </div>
             </footer>
         );
     });
-
-    const QuickAddInputForm = React.memo(({ onAdd, onCancel, placeholder = "New task title..." }) => {
-        const [internalValue, setInternalValue] = useState('');
-        const inputRef = useRef(null);
-
-        useEffect(() => {
-            if (inputRef.current) inputRef.current.focus();
-        }, []);
-
-        const handleSubmit = () => {
-            const trimmedValue = internalValue.trim();
-            if (trimmedValue) {
-                onAdd(trimmedValue);
-                setInternalValue(''); // Reset for next potential use if not hidden immediately
-            } else {
-                // If input is empty and Enter/Add is pressed, effectively cancel.
-                onCancel();
-            }
-        };
-
-        return (
-            <div className="p-2 border-b border-slate-700/50 bg-slate-800/30">
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={internalValue}
-                    onChange={e => setInternalValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onCancel(); }}
-                    placeholder={placeholder}
-                    className="w-full bg-slate-900/80 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500"
-                />
-                <div className="mt-2 flex justify-end space-x-2">
-                    <button onClick={onCancel} className="px-3 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded-md">Cancel</button>
-                    <button onClick={handleSubmit} className="px-3 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded-md">Add Task</button>
-                </div>
-            </div>
-        );
-    });
-
-    const HeaderQuickAdd = ({ onAddTask }) => {
-        const [isAdding, setIsAdding] = useState(false);
-        const [title, setTitle] = useState('');
-        const inputRef = useRef(null);
-
-        useEffect(() => {
-            if (isAdding && inputRef.current) {
-                inputRef.current.focus();
-            }
-        }, [isAdding]);
-
-        const handleAdd = () => {
-            if (title.trim()) {
-                onAddTask(title.trim());
-            }
-            setTitle('');
-            setIsAdding(false);
-        };
-
-        const handleKeyDown = (e) => {
-            if (e.key === 'Enter') handleAdd();
-            if (e.key === 'Escape') setIsAdding(false);
-        };
-
-        return (
-            <div className="relative flex-grow max-w-[10rem]">
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onBlur={handleAdd}
-                    placeholder="Quick add..."
-                    className="w-full bg-slate-700/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 placeholder-slate-400 hover:bg-slate-700 transition-colors"
-                />
-            </div>
-        );
-    };
 
     const AddTaskButton = React.memo(({ onAddTask }) => {
         const windowWidth = useWindowWidth();
@@ -1926,6 +1577,13 @@
             }
         };
 
+        const handleTitleKeyDown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevent form submission or newline
+                handleAdd();
+            }
+        };
+
         const handleAddTag = () => {
             const trimmedTag = currentTagInput.trim();
             if (trimmedTag && !tags.includes(trimmedTag)) {
@@ -1948,7 +1606,7 @@
                             type="text"
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAdd(); }}
+                            onKeyDown={handleTitleKeyDown}
                             placeholder="Enter task title..."
                             className="w-full bg-slate-900/80 text-slate-200 text-lg p-3 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500"
                         />
@@ -1968,34 +1626,6 @@
                             </div>
                         </div>
 
-                        {/* Tagging UI */}
-                        <div className="pt-2 border-t border-slate-700/50">
-                            <label className="text-sm text-slate-400 mb-2 block">Tags:</label>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {tags.map(tag => (
-                                    <span key={tag} className="bg-slate-700 text-xs text-slate-200 px-2 py-1 rounded-full flex items-center">
-                                        {tag}
-                                        <button onClick={() => handleRemoveTag(tag)} title={`Remove tag: ${tag}`} className="ml-2 text-slate-400 hover:text-white leading-none">&times;</button>
-                                    </span>
-                                ))}
-                            </div>
-                            <div className="flex">
-                                <input
-                                    list="tag-suggestions-modal"
-                                    type="text"
-                                    value={currentTagInput}
-                                    onChange={(e) => setCurrentTagInput(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                                    placeholder="Add a tag..."
-                                    className="bg-slate-900/50 text-slate-200 text-sm p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 flex-grow min-w-0"
-                                />
-                                <datalist id="tag-suggestions-modal">
-                                    {allTags.map(tag => <option key={tag} value={tag} />)}
-                                </datalist>
-                                <button onClick={handleAddTag} title="Add this tag" className="ml-2 text-sm bg-sky-600 text-white px-4 py-1 rounded-md hover:bg-sky-500">Add</button>
-                            </div>
-                        </div>
-
                         {/* Action Buttons */}
                         <div className="flex justify-end space-x-2 pt-3 border-t border-slate-700/50">
                             <button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button>
@@ -2007,6 +1637,38 @@
         );
     };
 
+    const NewProjectModal = ({ onAdd, onCancel }) => {
+        const [name, setName] = useState('');
+        const inputRef = useRef(null);
+
+        useEffect(() => {
+            if (inputRef.current) inputRef.current.focus();
+        }, []);
+
+        const handleAdd = () => {
+            if (name.trim()) {
+                onAdd(name.trim());
+            }
+        };
+
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleAdd(); }
+        };
+
+        return (
+            <Modal onClose={onCancel}>
+                <ModalContent title="Create New Project" onClose={onCancel}>
+                    <div className="space-y-4">
+                        <input ref={inputRef} type="text" value={name} onChange={e => setName(e.target.value)} onKeyDown={handleKeyDown} placeholder="Enter project name..." className="w-full bg-slate-900/80 text-slate-200 text-lg p-3 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500" />
+                        <div className="flex justify-end space-x-2 pt-3 border-t border-slate-700/50">
+                            <button onClick={onCancel} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button>
+                            <button onClick={handleAdd} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500">Create Project</button>
+                        </div>
+                    </div>
+                </ModalContent>
+            </Modal>
+        );
+    };
     const Modal = ({ children, onClose }) => <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">{children}</div>;
     const ModalContent = ({ title, children, onClose, headerActions }) => (
         <div 
@@ -2020,7 +1682,6 @@
             <div className="p-4 overflow-y-auto">{children}</div>
         </div>
     );
-    const CompleteConfirmationModal = ({ task, onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Mark Task as Complete?</h3><p className="text-slate-300 mb-4">This will move the task "{task.title}" to the completed view.</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Keep task active" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm completion" className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Mark as Complete</button></div></div></Modal>;
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm permanent deletion" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
@@ -2033,16 +1694,21 @@
                             <label className="text-slate-300">Confirm on Delete</label>
                             <button onClick={() => handleToggle('confirmOnDelete')} title={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                         </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-slate-300">Auto-collapse Empty Columns</label>
-                            <button onClick={() => handleToggle('autoCollapse')} title={settings.autoCollapse ? "Disable auto-collapse" : "Enable auto-collapse"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.autoCollapse ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.autoCollapse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                        </div>
                         <div className="pt-4 border-t border-slate-700/50 space-y-4">
                             <h4 className="text-lg font-semibold text-slate-200">Background Animation</h4>
                             <div className="flex items-center justify-between">
                                 <label className="text-slate-300">Enable Animation</label>
                                 <button onClick={() => handleAnimationSettingChange('enabled', !settings.animationSettings.enabled)} title={settings.animationSettings.enabled ? "Disable background animation" : "Enable background animation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                             </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-slate-300">Mouse Interaction</label>
+                                <button onClick={() => handleAnimationSettingChange('mouseInteraction', !settings.animationSettings.mouseInteraction)} title={settings.animationSettings.mouseInteraction ? "Disable mouse interaction" : "Enable mouse interaction"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.mouseInteraction ? 'bg-green-500' : 'bg-slate-600'}`} disabled={!settings.animationSettings.enabled}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.mouseInteraction ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-slate-300">Click Pulse Effect</label>
+                                <button onClick={() => handleAnimationSettingChange('clickPulse', !settings.animationSettings.clickPulse)} title={settings.animationSettings.clickPulse ? "Disable click pulse" : "Enable click pulse"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.clickPulse ? 'bg-green-500' : 'bg-slate-600'}`} disabled={!settings.animationSettings.enabled}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.clickPulse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                            </div>
+
                             <div className="flex flex-col space-y-2">
                                 <label htmlFor="particleCount" className="text-slate-300 flex justify-between">
                                     <span>Particle Count</span>
@@ -2129,23 +1795,48 @@
         );
     };
 
-    const ReleaseNotesModal = ({ version, releaseInfo, onClose }) => {
-        if (!releaseInfo) return null;
+    const ReleaseNotesModal = ({ version, onClose }) => {
+        const [expandedVersions, setExpandedVersions] = useState({});
+        const currentReleaseInfo = RELEASE_NOTES[version];
+        // Get all other versions, sort them descending
+        const previousVersionKeys = Object.keys(RELEASE_NOTES)
+            .filter(v => v !== version)
+            .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+        if (!currentReleaseInfo) return null;
+
+        const toggleVersion = (v) => setExpandedVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
         return (
             <Modal onClose={onClose}>
                 <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
-                        <h3 className="text-xl font-bold">{releaseInfo.title}</h3>
+                        <h3 className="text-xl font-bold">{currentReleaseInfo.title}</h3>
                         <button onClick={onClose} title="Close Release Notes" className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm">Got it!</button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-4">
-                        {releaseInfo.notes.map((note, index) => (
+                        {currentReleaseInfo.notes.map((note, index) => (
                             <div key={index} className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
                                 <h4 className="font-bold text-sky-300 mb-1">{note.title}</h4>
                                 <p className="text-sm text-slate-300">{note.description}</p>
                             </div>
                         ))}
+                        {previousVersionKeys.length > 0 && <div className="pt-4 border-t border-slate-700/50 space-y-2">
+                            {previousVersionKeys.map(vKey => {
+                                const release = RELEASE_NOTES[vKey];
+                                return (
+                                    <div key={vKey}>
+                                        <button onClick={() => toggleVersion(vKey)} className="w-full flex justify-between items-center p-2 text-left rounded-md hover:bg-slate-700/50">
+                                            <h4 className="text-md font-semibold text-slate-400">{release.title}</h4>
+                                            <ChevronDownIcon className={`h-5 w-5 text-slate-400 transition-transform ${expandedVersions[vKey] ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {expandedVersions[vKey] && <div className="mt-2 space-y-3 pl-4 pr-2">
+                                            {release.notes.map((note, index) => <p key={index} className="text-sm text-slate-400"><span className="font-semibold text-slate-300">{note.title}:</span> {note.description}</p>)}
+                                        </div>}
+                                    </div>
+                                );
+                            })}
+                        </div>}
                     </div>
                 </div>
             </Modal>
@@ -2178,9 +1869,11 @@
         // --- Default Animation Settings ---
         let animSettings = {
             enabled: true,
-            particleCount: window.innerWidth > 768 ? 100 : 40,
-            connectionDistance: 120,
-            particleSpeed: 0.5,
+            particleCount: 350,
+            connectionDistance: 200,
+            particleSpeed: 0.3,
+            mouseInteraction: true,
+            clickPulse: true,
         };
 
         let particles = [];
@@ -2197,8 +1890,19 @@
             mouse.radius = isSmallScreen() ? (canvas.width / 15) + 20 : (canvas.width / 12) + 50; // Keep mouse radius update
         }
 
+        let wasSmall = isSmallScreen();
         window.addEventListener('resize', () => {
             resizeCanvas();
+            const isNowSmall = isSmallScreen();
+
+            if (isNowSmall !== wasSmall) {
+                if (isNowSmall) {
+                    stopAnimation();
+                } else if (animSettings.enabled) {
+                    startAnimation();
+                }
+                wasSmall = isNowSmall;
+            }
         });
 
         window.addEventListener('mousemove', (event) => {
@@ -2211,25 +1915,9 @@
             mouse.y = null;
         });
 
-        // Listen for layout changes from React to control animation
-        window.addEventListener('layoutChange', (event) => {
-            const { isVertical } = event.detail;
-            if (isVertical) {
-                // If layout is vertical (collapsed columns), stop the animation.
-                if (animationFrameId) {
-                    stopAnimation();
-                }
-            } else {
-                // If layout is horizontal, restart the animation if it's not running and is enabled.
-                if (!animationFrameId && animSettings.enabled) {
-                    startAnimation();
-                }
-            }
-        });
-
         // Listen for clicks to create a pulse
         window.addEventListener('click', (event) => {
-            if (!animSettings.enabled) return;
+            if (!animSettings.enabled || !animSettings.clickPulse) return;
             pulses.push({
                 x: event.clientX,
                 y: event.clientY,
@@ -2241,22 +1929,27 @@
 
         // Listen for settings changes from React
         window.addEventListener('animationSettingsChange', (event) => {
-            const oldSettings = { ...animSettings };
-            animSettings = { ...animSettings, ...event.detail };
+            const newSettings = event.detail;
+            const oldEnabled = animSettings.enabled;
 
-            if (animSettings.enabled && !oldSettings.enabled) {
-                startAnimation(); // Start if it was just enabled
-            } else if (!animSettings.enabled && oldSettings.enabled) {
-                stopAnimation(); // Stop if it was just disabled
-            } else if (animSettings.enabled && animSettings.particleCount !== oldSettings.particleCount) {
-                init(); // Re-initialize if particle count changes while enabled
-            } else if (animSettings.enabled && animSettings.particleSpeed !== oldSettings.particleSpeed) {
-                // Adjust speed of existing particles without re-initializing
-                const speedRatio = oldSettings.particleSpeed > 0 ? animSettings.particleSpeed / oldSettings.particleSpeed : 1;
+            // Check if particle speed changed to adjust velocity without a full reset
+            if (newSettings.enabled && newSettings.particleSpeed !== animSettings.particleSpeed && animSettings.particleSpeed > 0) {
+                const speedRatio = newSettings.particleSpeed / animSettings.particleSpeed;
                 particles.forEach(p => {
                     p.vx *= speedRatio;
                     p.vy *= speedRatio;
                 });
+            }
+
+            // Update the global animation settings object
+            animSettings = { ...animSettings, ...newSettings };
+
+            if (animSettings.enabled && !oldEnabled) {
+                startAnimation(); // Start if it was just enabled
+            } else if (!animSettings.enabled && oldEnabled) {
+                stopAnimation(); // Stop if it was just disabled
+            } else if (animSettings.enabled && newSettings.particleCount !== particles.length) {
+                init(); // Re-initialize if particle count changes while enabled
             }
         });
 
@@ -2296,7 +1989,7 @@
 
                 // Mouse interaction - determine color
                 this.currentColor = null; // Reset color
-                if (mouse.x !== null) {
+                if (animSettings.mouseInteraction && mouse.x !== null) {
                     let dx = mouse.x - this.x;
                     let dy = mouse.y - this.y;
                     let distance = Math.sqrt(dx * dx + dy * dy);
@@ -2380,7 +2073,7 @@
                         let strokeStyle = `rgba(100, 116, 139, ${1 - distance / animSettings.connectionDistance})`;
                         
                         // Check for mouse interaction color
-                        if (mouse.x !== null) {
+                        if (animSettings.mouseInteraction && mouse.x !== null) {
                             const midX = (p1.x + p2.x) / 2;
                             const midY = (p1.y + p2.y) / 2;
                             const mouseDx = mouse.x - midX;
@@ -2442,4 +2135,5 @@
     </script>
 </body>
 </html>
+
  
