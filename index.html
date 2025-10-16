@@ -94,7 +94,7 @@
 
     // -----------------------------------------------------------------------------------------------------------------------------  THIS IS WHERE THE RELEASE NOTES ARE -----------------------------------------------------------------------------------------------------------------------------
     // --- Global Constants & Configurations ---
-    const CURRENT_APP_VERSION = '1.3.0';
+    const CURRENT_APP_VERSION = '1.3.1';
 
     const RELEASE_NOTES = {
         '1.0.0': {
@@ -124,7 +124,7 @@
             ]
         },
         '1.3.0': {
-            title: "What's New in Version 1.3.0",
+            title: "Previous Version: 1.3.0",
             notes: [
                 {
                     title: "✨ New UI: Master-Detail Layout",
@@ -137,6 +137,19 @@
                 {
                     title: "🎨 Redesigned Task Cards & Filters",
                     description: "Task cards have been updated for better clarity within the new layout, and the filtering UI has been streamlined into a single, easy-to-use dropdown menu."
+                }
+            ]
+        },
+        '1.3.1': {
+            title: "What's New in Version 1.3.1",
+            notes: [
+                {
+                    title: "🔗 Dependency Management UX",
+                    description: "The user experience for managing task dependencies has been improved. When adding a downstream dependency (blocking another task), the UI is now cleaner and more consistent with the surrounding elements."
+                },
+                {
+                    title: "🚫 Proactive Circular Dependency Prevention",
+                    description: "To prevent errors, the app now stops you from creating circular dependencies before you can even select an invalid task. The dropdown list for blocking tasks will automatically filter out any options that would result in a dependency loop."
                 }
             ]
         }
@@ -588,12 +601,6 @@
         </svg>
     ));
     const CheckIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>);
-    const GraphIcon = React.memo(() => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4-2.245 4.5 4.5 0 118.5-2.245c0 1.319-.694 2.478-1.76 3.118l-1.06-1.06z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14.47 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4-2.245 4.5 4.5 0 118.5-2.245c0 1.319-.694 2.478-1.76 3.118l-1.06-1.06z" />
-        </svg>
-    ));
     const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
@@ -610,12 +617,10 @@
         };
 
         return (
-            <div className="flex flex-row items-baseline space-x-2 text-slate-300">
+            <button onClick={handleTimezoneClick} title="Change timezone" className="flex flex-row items-baseline space-x-2 text-slate-300 rounded-md p-2 -m-2 hover:bg-slate-700/50 transition-colors">
                 <span className="text-2xl md:text-4xl font-mono tracking-wider">{formattedTime}</span>
-                <button onClick={handleTimezoneClick} title="Change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer p-0">
-                    {currentLabel}
-                </button>
-            </div>
+                <span className="text-lg md:text-2xl font-mono text-slate-500">{currentLabel}</span>
+            </button>
         );
     });
 
@@ -790,7 +795,7 @@
     });
 
     // --- Task Card Component ---
-    const TaskCard = ({ task, clockTimezone, startInEditMode, onEditModeEnd, isDetailedView }) => {
+    const TaskCard = ({ task, clockTimezone, startInEditMode, onEditModeEnd, isDetailedView, onSelect }) => {
         const { tasks, updateTask, deleteTask, allTags, settings, setTaskToDelete, activeTags } = useAppContext();
         const now = useNow();
         const isLocked = task.status === TASK_STATUS.DONE;
@@ -806,8 +811,17 @@
         const titleInputRef = useRef(null); // Ref for the title input
         const [isChecklistExpanded, setIsChecklistExpanded] = useState(true);
         const [dueDateInput, setDueDateInput] = useState('');
+        const [isActivityLogExpanded, setIsActivityLogExpanded] = useState(false);
         const [tagInput, setTagInput] = useState('');
         const [showResetTimeConfirm, setShowResetTimeConfirm] = useState(false);
+        const [isAddingUpstream, setIsAddingUpstream] = useState(false);
+
+        const upstreamTasks = useMemo(() => {
+            if (!task.dependsOn || task.dependsOn.length === 0) return [];
+            // Only show upstream tasks that are not yet completed.
+            return task.dependsOn.map(depId => tasks.find(t => t.id === depId))
+                .filter(t => t && t.status !== TASK_STATUS.DONE);
+        }, [task.dependsOn, tasks]);
 
         const isBlocked = useMemo(() => {
             if (!task.dependsOn || task.dependsOn.length === 0) return false;
@@ -831,6 +845,7 @@
         // State for the downstream add UI
         const [isAddingDownstream, setIsAddingDownstream] = useState(false);
         const addDownstreamInputRef = useRef(null);
+        const addUpstreamInputRef = useRef(null);
 
         const availableDownstreamTasks = useMemo(() => {
             // A task cannot block another task that is already in its own upstream.
@@ -851,6 +866,26 @@
                 return !isCircular(task.id, t.id);
             });
         }, [tasks, task.id]);
+
+        const availableUpstreamTasks = useMemo(() => {
+            // A task cannot depend on another task that already depends on it.
+            const isCircular = (potentialDownstreamId, targetId) => {
+                const taskToCheck = tasks.find(t => t.id === potentialDownstreamId);
+                if (!taskToCheck || !taskToCheck.dependsOn) return false;
+                if (taskToCheck.dependsOn.includes(targetId)) return true;
+                return taskToCheck.dependsOn.some(depId => isCircular(depId, targetId));
+            };
+
+            return tasks.filter(t => {
+                // Standard filters: not itself, not done, not already a dependency.
+                if (t.id === task.id || t.status === TASK_STATUS.DONE || task.dependsOn?.includes(t.id)) {
+                    return false;
+                }
+                // Circular dependency check: `task` cannot be an upstream dependency of `t`.
+                return !isCircular(t.id, task.id);
+            });
+        }, [tasks, task.id]);
+
         useEffect(() => { setDueDateInput(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : ''); }, [task.dueDate]);
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
@@ -876,6 +911,12 @@
                 addDownstreamInputRef.current.focus();
             }
         }, [isAddingDownstream]);
+
+        useEffect(() => {
+            if (isAddingUpstream && addUpstreamInputRef.current) {
+                addUpstreamInputRef.current.focus();
+            }
+        }, [isAddingUpstream]);
 
         // Effect to auto-resize the notes textarea
         useEffect(() => {
@@ -1022,6 +1063,16 @@
             }
         };
 
+        const handleAddUpstreamDependency = (e) => {
+            const dependencyId = e.target.value;
+            if (!dependencyId) return;
+
+            const dependencyTask = tasks.find(t => t.id === dependencyId);
+            if (dependencyTask) {
+                const newDependsOn = [...(task.dependsOn || []), dependencyId];
+                updateTask(task.id, { dependsOn: newDependsOn }, `Now depends on "${dependencyTask.title}".`);
+            }
+        };
         const handleRemoveDownstreamDependency = (taskToUnblockId) => {
             const taskToUnblock = tasks.find(t => t.id === taskToUnblockId);
             const newDependsOn = taskToUnblock.dependsOn.filter(id => id !== task.id);
@@ -1054,9 +1105,9 @@
         const textSize = 'text-sm';
         
         return (
-            !isDetailedView ? (
+            !isDetailedView ? ( // This is the Project View Card
                 // --- Project View Card (3-Column Layout) ---
-                <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-md transition-shadow duration-300 ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/50' : ''}`}>
+                <div onClick={() => onSelect(task.id)} className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-md transition-all duration-300 cursor-pointer hover:border-sky-500 hover:shadow-lg ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/50' : ''}`}>
                     <div className="px-4 pt-3 pb-2 border-b border-slate-700/50">
                         <div className="flex items-center gap-2">
                             {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
@@ -1064,12 +1115,31 @@
                             <h3 className={`font-semibold text-slate-100 break-words text-base ${isLocked ? 'line-through text-slate-500' : ''}`}>{task.title}</h3>
                         </div>
                     </div>
-                    <div className="grid grid-cols-4 divide-x divide-slate-700 text-center">
+                    <div className="grid grid-cols-5 divide-x divide-slate-700 text-center">
                         {/* Column 1: Priority */}
                         <div className="p-3">
                             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Priority</div>
                             <div className={`text-sm font-bold rounded-md py-1 ${PRIORITY_CONFIG[task.priority]?.color || 'text-slate-300'}`}>
                                 {PRIORITY_CONFIG[task.priority]?.title || 'N/A'}
+                            </div>
+                        </div>
+                        {/* Blocked By Column */}
+                        <div className="p-3">
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Blocked By</div>
+                            <div className="text-xs text-slate-300 py-1 break-words">
+                                {upstreamTasks.length > 0 ? (
+                                    upstreamTasks.map((t, index) => (
+                                        <React.Fragment key={t.id}>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onSelect(t.id); }}
+                                                className="transition-all hover:text-sky-300 hover:[text-shadow:0_0_8px_theme(colors.sky.400)]"
+                                                title={`Go to task: ${t.title}`}
+                                            >{t.title}</button>
+                                            {index < upstreamTasks.length - 1 ? ', ' : ''}
+                                        </React.Fragment>
+                                    ))
+                                ) : <span className="italic text-slate-500">None</span>
+                                }
                             </div>
                         </div>
                         {/* Column 2: Time Tracking */}
@@ -1116,23 +1186,38 @@
                             )}
                         </div>
 
-                        {/* Priority Dots */}
-                        {isDetailedView && <div className="flex items-center space-x-2 flex-shrink-0">
-                            <span className="text-xs text-slate-400">Priority:</span>
-                            {DISPLAY_PRIORITY_ORDER.map(pConst => {
-                                const config = PRIORITY_CONFIG[pConst];
-                                const isSelected = task.priority === pConst;
-                                return (
-                                    <button
-                                        key={pConst}
-                                        title={`Set priority: ${config.title}`}
-                                        onClick={() => handleSetPriority(pConst)}
-                                        disabled={isLocked}
-                                        className={`w-3 h-3 rounded-full transition-all duration-150 ${isSelected ? `ring-2 ring-offset-2 ring-offset-slate-800 ${config.color.replace('text-', 'ring-')}` : 'opacity-50 hover:opacity-100'} ${config.color.replace('text-', 'bg-')}`}
-                                    ></button>
-                                );
-                            })}
-                        </div>}
+                        {/* Right-side Header Actions: Priority & Completion */}
+                        {isDetailedView && (
+                            <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                                {/* Priority Dots */}
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-slate-400">Priority:</span>
+                                    {DISPLAY_PRIORITY_ORDER.map(pConst => {
+                                        const config = PRIORITY_CONFIG[pConst];
+                                        const isSelected = task.priority === pConst;
+                                        const isTogglingOff = isSelected;
+                                        return (
+                                            <button
+                                                key={pConst} title={`Set priority: ${config.title}`}
+                                                onClick={() => handleSetPriority(pConst)} disabled={isLocked}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${isSelected ? `${config.bgColor} ${config.borderColor} ${config.color}` : `bg-slate-600/30 border-slate-600 text-slate-300 hover:${config.bgColor}`}`}
+                                            >{config.title}</button>
+                                        );
+                                    })}
+                                </div>
+                                {/* Completion Button */}
+                                <div>
+                                    <button 
+                                        onClick={handleCompletionToggle} 
+                                        title={isBlocked ? "Task is blocked by a dependency" : (isLocked ? "Mark as 'To Do'" : "Mark as 'Completed'")} 
+                                        disabled={isBlocked && !isLocked}
+                                        className={`p-2 rounded-full transition-all duration-200 transform hover:scale-110 ${isLocked ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'} disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:scale-100`}
+                                    >
+                                        <CheckIcon />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1271,35 +1356,55 @@
                     {/* --- Dependencies Section (Detailed View Only) --- */}
                     {isDetailedView && (
                         <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50 space-y-3">
-                            <div className="grid grid-cols-3 gap-3 text-center">
-                                <label className="text-sm font-semibold text-slate-300">Upstream</label>
-                                <label className="text-sm font-semibold text-slate-300">Current Task</label>
-                                <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center gap-3 text-center">
+                                <div className="flex-1 flex items-center justify-center gap-2">
+                                    <label className="text-sm font-semibold text-slate-300">Upstream</label>
+                                    {!isLocked && (
+                                        <button onClick={() => setIsAddingUpstream(p => !p)} title="Add upstream dependency" className="text-sky-400 hover:text-sky-300">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="w-6 h-6 flex-shrink-0"></div> {/* Spacer for arrow */}
+                                <label className="flex-1 w-1/3 text-sm font-semibold text-slate-300">Current Task</label>
+                                <div className="w-6 h-6 flex-shrink-0"></div> {/* Spacer for arrow */}
+                                <div className="flex-1 flex items-center justify-center gap-2">
                                     <label className="text-sm font-semibold text-slate-300">Downstream</label>
                                     {!isLocked && (
-                                        <button onClick={() => setIsAddingDownstream(p => !p)} title="Add downstream dependency" className="text-sky-400 hover:text-sky-300">
+                                        <button onClick={() => setIsAddingDownstream(p => !p)} title="Block another task" className="text-sky-400 hover:text-sky-300">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" /></svg>
                                         </button>
                                     )}
                                 </div>
                             </div>
-                            <div className="flex items-start gap-3">
+                            <div className="flex items-center gap-3">
                                 {/* Upstream Column */}
                                 <div className="flex-1 space-y-2">
                                     {(task.dependsOn || []).length > 0 ? (
                                         <div className="space-y-2">
                                             {(task.dependsOn || []).map(depId => {
                                                 const depTask = tasks.find(t => t.id === depId);
-                                                if (!depTask) return null;
+                                                if (!depTask) return null; // <-- This is the fix.
                                                 const isDepDone = depTask.status === TASK_STATUS.DONE;
                                                 return (
-                                                    <div key={depId} className="bg-slate-800/70 p-3 rounded-md text-sm text-center min-h-[52px] flex items-center justify-center">
-                                                        <span className={`${isDepDone ? 'line-through text-slate-500' : 'text-slate-200'}`}>{depTask.title}</span>
+                                                    <div key={depId} className="flex items-center justify-between bg-slate-800/70 p-3 rounded-md text-sm text-center min-h-[52px]">
+                                                        <span className={`flex-grow ${isDepDone ? 'line-through text-slate-500' : 'text-slate-200'}`}>{depTask.title}</span>
+                                                        {!isLocked && <button onClick={() => handleRemoveDependency(depId)} className="text-slate-500 hover:text-red-400 ml-2 flex-shrink-0">&times;</button>}
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                    ) : <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>}
+                                    ) : (
+                                        !isAddingUpstream && <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>
+                                    )}
+                                    {isAddingUpstream && !isLocked && (
+                                        <select ref={addUpstreamInputRef} onChange={handleAddUpstreamDependency} onBlur={() => setIsAddingUpstream(false)} className="w-full bg-slate-800 text-slate-200 text-sm p-3 rounded-md border border-slate-600 focus:ring-1 focus:ring-sky-500 min-h-[52px]">
+                                            <option value="">+ Add dependency...</option>
+                                            {availableUpstreamTasks.map(t => (
+                                                <option key={t.id} value={t.id} title={t.title}>{t.title}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
 
                                 {/* Arrow 1 */}
@@ -1348,21 +1453,28 @@
 
                     {/* --- Activity Log Section (Detailed View Only) --- */}
                     {isDetailedView && (task.activityLog || []).length > 0 && (
-                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
-                            <h4 className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Activity Log</h4>
-                            <div className="space-y-2 max-h-[6.5rem] overflow-y-auto pr-2">
-                                {[...(task.activityLog || [])].reverse().map((log, index) => (
-                                    <div key={index} className="flex justify-between items-center text-xs">
-                                        <p className="text-slate-300">{log.message}</p>
-                                        <p className="text-slate-500 whitespace-nowrap pl-4">
-                                            {new Date(log.timestamp).toLocaleString([], { 
-                                                timeZone: clockTimezone, 
-                                                month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' 
-                                            })}
-                                        </p>
-                                    </div>
+                        <div className="bg-slate-900/40 rounded-lg border border-slate-700/50">
+                            <button onClick={() => setIsActivityLogExpanded(p => !p)} className="w-full flex justify-between items-center p-3 text-left">
+                                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Activity Log ({task.activityLog.length})</h4>
+                                <ChevronDownIcon className={`h-5 w-5 text-slate-400 transition-transform ${isActivityLogExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isActivityLogExpanded && (
+                                <div className="px-3 pb-3">
+                                    <div className="space-y-2 max-h-[22.5rem] overflow-y-auto pr-2 border-t border-slate-700/50 pt-3">
+                                        {[...(task.activityLog || [])].reverse().map((log, index) => (
+                                            <div key={index} className="flex justify-between items-center text-xs">
+                                                <p className="text-slate-300">{log.message}</p>
+                                                <p className="text-slate-500 whitespace-nowrap pl-4">
+                                                    {new Date(log.timestamp).toLocaleString([], { 
+                                                        timeZone: clockTimezone, 
+                                                        month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+                                                    })}
+                                                </p>
+                                            </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -1406,15 +1518,7 @@
                                     <option key={project} value={project}>{project}</option>
                                 ))}
                             </select>
-                            <div className="flex items-center space-x-2">
-                                <button 
-                                    onClick={handleCompletionToggle} 
-                                    title={isBlocked ? "Task is blocked by a dependency" : (isLocked ? "Mark as 'To Do'" : "Mark as 'Completed'")} 
-                                    disabled={isBlocked && !isLocked}
-                                    className={`p-1 rounded-full transition-colors ${isLocked ? 'bg-green-500 text-white' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'} disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent`}
-                                >
-                                    <CheckIcon />
-                                </button>
+                            <div className="flex items-center">
                                 <button onClick={handleDeleteRequest} title="Delete Permanently" className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button>
                             </div>
                             </div>
@@ -1496,7 +1600,7 @@
         );
     });
 
-    const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask, onShowGraphView }) => {
+    const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask }) => {
         const { projectSettings, collapsedProjects, toggleProjectCollapse } = useAppContext();
         const groupedAndSortedTasks = useMemo(() => { // This logic is correct, no changes needed here.
             // Manual sorting by rank is now the primary method.
@@ -1557,7 +1661,6 @@
                                     <span className="text-indigo-300 hover:underline">{projectName} ({tasksInGroup.length})</span>
                                 </div>
                                 {projectName !== 'Completed' && <>
-                                    <button onClick={() => onShowGraphView(projectName)} title={`Show dependency graph for ${projectName}`} className="p-1 text-indigo-300 hover:text-white rounded-full hover:bg-indigo-500/30 transition-colors flex-shrink-0 mx-1"><GraphIcon /></button>
                                     <button onClick={() => onAddTask(projectName)} title={`Add task to ${projectName}`} className="p-1 text-sky-300 hover:text-white rounded-full hover:bg-sky-500/30 transition-colors flex-shrink-0 mx-1"><PlusIcon /></button>
                                 </>}
                                 {projectName === 'Completed' && (
@@ -1602,7 +1705,6 @@
         const [showNewProjectModal, setShowNewProjectModal] = useState(false);
         const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
         const [selectedProjectName, setSelectedProjectName] = useState(null);
-        const [graphViewProject, setGraphViewProject] = useState(null);
         const [taskToComplete, setTaskToComplete] = useState(null);
         const windowWidth = useWindowWidth();
         // --- Effect for showing release notes once per version ---
@@ -1785,8 +1887,18 @@
                     projectTasks.forEach((task, taskIndex) => {
                         const isLastTask = taskIndex === projectTasks.length - 1;
                         const projectIndent = isLastProject ? '   ' : '│  ';
+                        // Only show upstream dependencies that are not yet completed.
+                        const upstreamDependencies = (task.dependsOn || []).map(depId => tasks.find(t => t.id === depId))
+                            .filter(t => t && t.status !== TASK_STATUS.DONE);
+
                         const taskPrefix = isLastTask ? '└─' : '├─';
                         let taskLine = `${projectIndent}${taskPrefix} ${isCompletedSection ? '☑' : '☐'} ${task.title}`;
+                        
+                        if (upstreamDependencies.length > 0) {
+                            const blockedByText = upstreamDependencies.map(t => t.title).join(', ');
+                            taskLine += ` [Blocked by: ${blockedByText}]`;
+                        }
+
                         if (isCompletedSection) {
                             taskLine += ` (Completed: ${formatTime(task.timestamp)})`;
                         }
@@ -1883,7 +1995,6 @@ const handleProjectHeaderClick = (projectName) => {
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
                 {showNewProjectModal && <NewProjectModal onAdd={handleCreateProject} onCancel={() => setShowNewProjectModal(false)} />}
                 {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
-                {graphViewProject && <DependencyGraphModal projectName={graphViewProject} allTasks={tasks} onClose={() => setGraphViewProject(null)} />}
                 {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
                 
                 <header className="sticky top-0 z-20 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
@@ -1931,7 +2042,6 @@ const handleProjectHeaderClick = (projectName) => {
                                     tasks={tasksMatchingActiveFilters}
                                     selectedTaskId={selectedTaskId}
                                     onSelectTask={(id) => { setSelectedTaskId(id); setSelectedProjectName(null); }} // This is correct
-                                    onShowGraphView={setGraphViewProject}
                                     onProjectHeaderClick={handleProjectHeaderClick}
                                     selectedProjectName={selectedProjectName}
                                     onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} // Pass down the modal toggle
@@ -1953,8 +2063,13 @@ const handleProjectHeaderClick = (projectName) => {
                             <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${showListViewOnMobile ? 'hidden' : ''}`}>
                                 {selectedProjectName ? (
                                     <div className="space-y-4">
-                                        {tasksForProjectView.length > 0 ? ( // When viewing a project, isDetailedView is false (default)
-                                            tasksForProjectView.map(task => <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} isDetailedView={false} />)
+                                        {tasksForProjectView.length > 0 ? (
+                                            tasksForProjectView.map(task => 
+                                                <MemoizedTaskCard 
+                                                    key={task.id} task={task} clockTimezone={clockTimezone} isDetailedView={false} 
+                                                    onSelect={(id) => { setSelectedTaskId(id); setSelectedProjectName(null); }}
+                                                />
+                                            )
                                         ) : ( 
                                             <p className="text-slate-500 px-2">No tasks in this project.</p>
                                         )}
@@ -2241,103 +2356,6 @@ const handleProjectHeaderClick = (projectName) => {
                         </div>
                     </div>
                 </ModalContent>
-            </Modal>
-        );
-    };
-    const DependencyGraphModal = ({ projectName, allTasks, onClose }) => {
-        const nodeRefs = useRef({});
-        const [edges, setEdges] = useState([]);
-        const modalContentRef = useRef(null);
-
-        const { nodes, tasksById } = useMemo(() => {
-            const projectTasks = allTasks.filter(t => (t.project || 'Unassigned') === projectName);
-            const projectTaskIds = new Set(projectTasks.map(t => t.id));
-            const relevantTaskIds = new Set(projectTaskIds);
-
-            // Find all upstream and downstream tasks
-            projectTasks.forEach(task => {
-                (task.dependsOn || []).forEach(depId => relevantTaskIds.add(depId));
-            });
-            allTasks.forEach(task => {
-                (task.dependsOn || []).forEach(depId => {
-                    if (projectTaskIds.has(depId)) {
-                        relevantTaskIds.add(task.id);
-                    }
-                });
-            });
-
-            const nodes = allTasks.filter(t => relevantTaskIds.has(t.id));
-            const tasksById = new Map(nodes.map(t => [t.id, t]));
-            return { nodes, tasksById };
-        }, [projectName, allTasks]);
-
-        useLayoutEffect(() => {
-            const newEdges = [];
-            const modalRect = modalContentRef.current.getBoundingClientRect();
-
-            nodes.forEach(task => {
-                (task.dependsOn || []).forEach(depId => {
-                    if (tasksById.has(depId)) {
-                        const fromNode = nodeRefs.current[depId];
-                        const toNode = nodeRefs.current[task.id];
-                        if (fromNode && toNode) {
-                            const fromRect = fromNode.getBoundingClientRect();
-                            const toRect = toNode.getBoundingClientRect();
-
-                            newEdges.push({
-                                id: `${depId}-${task.id}`,
-                                x1: fromRect.right - modalRect.left,
-                                y1: fromRect.top + fromRect.height / 2 - modalRect.top,
-                                x2: toRect.left - modalRect.left,
-                                y2: toRect.top + toRect.height / 2 - modalRect.top,
-                            });
-                        }
-                    }
-                });
-            });
-            setEdges(newEdges);
-        }, [nodes, tasksById]);
-
-        return (
-            <Modal onClose={onClose}>
-                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-6xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
-                        <h3 className="text-xl font-bold">Dependency Graph: {projectName}</h3>
-                        <button onClick={onClose} title="Close Graph View" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Close</button>
-                    </div>
-                    <div ref={modalContentRef} className="p-8 overflow-auto relative">
-                        <svg className="absolute top-0 left-0 w-full h-full" style={{ pointerEvents: 'none' }}>
-                            <defs>
-                                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
-                                </marker>
-                            </defs>
-                            {edges.map(edge => (
-                                <line key={edge.id} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} stroke="#64748b" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                            ))}
-                        </svg>
-                        <div className="flex gap-8 items-start">
-                            {nodes.map(task => {
-                                const isExternal = (task.project || 'Unassigned') !== projectName;
-                                const isDone = task.status === TASK_STATUS.DONE;
-                                return (
-                                    <div
-                                        key={task.id}
-                                        ref={el => nodeRefs.current[task.id] = el}
-                                        className={`p-3 rounded-lg border-2 w-48 flex-shrink-0 ${
-                                            isDone ? 'bg-green-900/30 border-green-700 opacity-60' :
-                                            isExternal ? 'bg-slate-700/50 border-slate-600' :
-                                            'bg-sky-900/50 border-sky-700'
-                                        }`}
-                                    >
-                                        <p className={`font-bold text-sm ${isDone ? 'line-through text-slate-400' : 'text-slate-100'}`}>{task.title}</p>
-                                        {isExternal && <p className="text-xs text-slate-400 mt-1 italic">Project: {task.project || 'Unassigned'}</p>}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
             </Modal>
         );
     };
@@ -2818,4 +2836,4 @@ const handleProjectHeaderClick = (projectName) => {
         startAnimation();
     </script>
 </body>
-</html>
+</html> 
