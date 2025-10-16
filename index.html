@@ -832,6 +832,25 @@
         const [isAddingDownstream, setIsAddingDownstream] = useState(false);
         const addDownstreamInputRef = useRef(null);
 
+        const availableDownstreamTasks = useMemo(() => {
+            // A task cannot block another task that is already in its own upstream.
+            const isCircular = (potentialUpstreamId, targetId) => {
+                const taskToCheck = tasks.find(t => t.id === potentialUpstreamId);
+                if (!taskToCheck || !taskToCheck.dependsOn) return false;
+                if (taskToCheck.dependsOn.includes(targetId)) return true;
+                // Recursively check the upstream dependencies of the potential upstream task.
+                return taskToCheck.dependsOn.some(depId => isCircular(depId, targetId));
+            };
+
+            return tasks.filter(t => {
+                // Standard filters: not itself, not done, not already blocked by this task.
+                if (t.id === task.id || t.status === TASK_STATUS.DONE || t.dependsOn?.includes(task.id)) {
+                    return false;
+                }
+                // Circular dependency check: `t` cannot be an upstream dependency of the current task.
+                return !isCircular(task.id, t.id);
+            });
+        }, [tasks, task.id]);
         useEffect(() => { setDueDateInput(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : ''); }, [task.dueDate]);
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
@@ -1311,12 +1330,14 @@
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>}
+                                    ) : (
+                                        !isAddingDownstream && <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>
+                                    )}
                                     {isAddingDownstream && !isLocked && (
-                                        <select ref={addDownstreamInputRef} onChange={handleAddDownstreamDependency} onBlur={() => setIsAddingDownstream(false)} className="w-full bg-slate-800 text-slate-200 text-sm p-1.5 rounded-md border border-slate-600 focus:ring-1 focus:ring-sky-500">
+                                        <select ref={addDownstreamInputRef} onChange={handleAddDownstreamDependency} onBlur={() => setIsAddingDownstream(false)} className="w-full bg-slate-800 text-slate-200 text-sm p-3 rounded-md border border-slate-600 focus:ring-1 focus:ring-sky-500 min-h-[52px]">
                                             <option value="">+ Block another task...</option>
-                                            {tasks.filter(t => t.id !== task.id && t.status !== TASK_STATUS.DONE && !t.dependsOn?.includes(task.id)).map(t => (
-                                                <option key={t.id} value={t.id}>{t.title}</option>
+                                            {availableDownstreamTasks.map(t => (
+                                                <option key={t.id} value={t.id} title={t.title}>{t.title}</option>
                                             ))}
                                         </select>
                                     )}
