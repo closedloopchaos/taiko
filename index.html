@@ -169,7 +169,7 @@
         Object.values(PRIORITIES).map(pConstant => [PRIORITY_CONFIG[pConstant]?.title, pConstant]).filter(([title]) => title)
     ); // e.g., { "Low": "PRIORITY_LOW", ... }
 
-    const TASK_STATUS = { TO_DO: 'To Do', DONE: 'Done' };
+    const TASK_STATUS = { TO_DO: 'To Do', DONE: 'Completed' };
     const TIMEZONES = [
         { value: 'America/New_York', label: 'EST' },
         { value: 'America/Chicago', label: 'CST' },
@@ -185,11 +185,18 @@
             glowClass: 'shadow-[0_0_15px_-4px_rgba(56,189,248,0.5)] hover:shadow-[0_0_18px_-3px_rgba(56,189,248,0.7)]'
         },
         [TASK_STATUS.DONE]: { 
-            label: 'Done', 
+            label: 'Completed', 
             selectBgColor: 'bg-green-900/50', 
             accentClass: 'bg-green-500',
             glowClass: 'shadow-[0_0_12px_-5px_rgba(34,197,94,0.5)]' // More subtle glow for "Done"
         }
+    };
+
+    const TASK_SIZES = {
+        F1: 'F1 (S)',
+        F9: 'F9 (M)',
+        FH: 'FH (L)',
+        STARSHIP: 'Starship (XL)',
     };
 
     // --- Web Audio API Sound Generation ---
@@ -244,8 +251,31 @@
         const [activeTags, setActiveTags] = useState([]); // For filtering
         const [collapsedProjects, setCollapsedProjects] = useState({ 'Completed': true });
 
+
         const appId = 'taiko-app-local';
 
+        // --- Data Migration Effect ---
+        useEffect(() => {
+            const savedTasks = localStorage.getItem(`${appId}-tasks`);
+            if (savedTasks) {
+                let tasksToMigrate = JSON.parse(savedTasks);
+                // Migration: Add 'createdAt' field if it doesn't exist, using the existing 'timestamp' as a fallback.
+                // Also add 'activityLog' array and 'size' field, and handle legacy 'size' values.
+                const needsMigration = tasksToMigrate.some(t => !t.createdAt || !t.activityLog || t.size === undefined || (!Object.keys(TASK_SIZES).includes(t.size) && t.size !== null) || !t.dependsOn);
+                if (needsMigration) {
+                    tasksToMigrate = tasksToMigrate.map(t => ({ 
+                        ...t, 
+                        // If size is an old value (like 'XS', 'S', etc.), reset it to null.
+                        // Otherwise, keep its value or set it to null if it's undefined.
+                        size: t.size !== undefined && t.size !== null && Object.keys(TASK_SIZES).includes(t.size) ? t.size : null,
+                        dependsOn: t.dependsOn || [],
+                        createdAt: t.createdAt || t.timestamp,
+                        activityLog: t.activityLog || [{ message: 'Task created.', timestamp: t.createdAt || t.timestamp }]
+                    }));
+                    localStorage.setItem(`${appId}-tasks`, JSON.stringify(tasksToMigrate));
+                }
+            }
+        }, [appId]);
         // --- Local Storage Persistence ---
         useEffect(() => {
             const savedTasks = localStorage.getItem(`${appId}-tasks`);
@@ -336,29 +366,64 @@
 
 
         // --- Core Data Actions ---
-        const updateTask = useCallback((id, updatedFields) => {
-            setTasks(prevTasks => prevTasks.map(task => 
-                task.id === id ? { ...task, ...updatedFields, timestamp: new Date().toISOString() } : task
-            ));
+        const updateTask = useCallback((id, updatedFields, logMessage) => {
+            const now = new Date().toISOString();
+            setTasks(prevTasks => prevTasks.map(task => {
+                if (task.id !== id) return task;
+
+                // Create a new activity log entry if a message is provided
+                const newActivityLog = task.activityLog ? [...task.activityLog] : [];
+                if (logMessage) {
+                    newActivityLog.push({ message: logMessage, timestamp: now });
+                }
+
+                // Handle specific field changes to generate log messages automatically
+                if (updatedFields.priority !== undefined && updatedFields.priority !== task.priority) {
+                    const oldP = PRIORITY_CONFIG[task.priority]?.title || 'none';
+                    const newP = PRIORITY_CONFIG[updatedFields.priority]?.title || 'none';
+                    newActivityLog.push({ message: `Priority changed from ${oldP} to ${newP}.`, timestamp: now });
+                }
+                if (updatedFields.project !== undefined && updatedFields.project !== task.project) {
+                    const oldProj = task.project || 'Unassigned';
+                    newActivityLog.push({ message: `Moved from project "${oldProj}" to "${updatedFields.project || 'Unassigned'}".`, timestamp: now });
+                }
+                if (updatedFields.size !== undefined && updatedFields.size !== task.size) {
+                    const newSize = updatedFields.size ? TASK_SIZES[updatedFields.size] : 'Not Set';
+                    newActivityLog.push({ message: `Size set to ${newSize}.`, timestamp: now });
+                }
+                if (updatedFields.status !== undefined && updatedFields.status !== task.status) {
+                    newActivityLog.push({ message: `Status changed to ${updatedFields.status}.`, timestamp: now });
+                }
+
+                return { ...task, ...updatedFields, timestamp: now, activityLog: newActivityLog };
+            }));
         }, []);
         
         const addTask = useCallback((initialTitle = 'New Task', initialProject = null, initialPriority = null) => {
+            const now = new Date().toISOString();
             const newTask = {
                 id: crypto.randomUUID(),
                 title: initialTitle, 
                 checklist: [],
                 priority: initialPriority, 
                 status: 'To Do',
-                rank: tasks.filter(t => t.priority === initialPriority && !t.archived).length, // Rank will be based on the current priority value
-                timestamp: new Date().toISOString(), 
+                createdAt: now,
+                timestamp: now, 
                 project: initialProject,
                 notes: '', 
                 reminderAt: null,
-                reminderFired: false
+                reminderFired: false,
+                timeSpentSeconds: 0, 
+                timingSessionStartTime: null,
+                dueDate: null,
+                tags: [],
+                activityLog: [{ message: 'Task created.', timestamp: now }],
+                size: null,
+                dependsOn: []
             };
             setTasks(prevTasks => [newTask, ...prevTasks]);
             return newTask; // Return the new task so we can select it
-        }, [tasks]); // tasks dependency is for rank calculation
+        }, []);
 
         const deleteTask = useCallback((id) => {
             setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
@@ -523,6 +588,12 @@
         </svg>
     ));
     const CheckIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>);
+    const GraphIcon = React.memo(() => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4-2.245 4.5 4.5 0 118.5-2.245c0 1.319-.694 2.478-1.76 3.118l-1.06-1.06z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.47 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4-2.245 4.5 4.5 0 118.5-2.245c0 1.319-.694 2.478-1.76 3.118l-1.06-1.06z" />
+        </svg>
+    ));
     const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
     const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)"/><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3"/><circle cx="50" cy="50" r="8" fill="currentColor"/></g></svg>);
 
@@ -531,21 +602,25 @@
         const time = useNow();
         const formattedTime = time.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const currentLabel = TIMEZONES.find(tz => tz.value === timezone)?.label || timezone;
-        
+
+        const handleTimezoneClick = () => {
+            const currentIndex = TIMEZONES.findIndex(tz => tz.value === timezone);
+            const nextIndex = (currentIndex + 1) % TIMEZONES.length;
+            onTimezoneChange(TIMEZONES[nextIndex].value);
+        };
+
         return (
             <div className="flex flex-row items-baseline space-x-2 text-slate-300">
                 <span className="text-2xl md:text-4xl font-mono tracking-wider">{formattedTime}</span>
-                <select value={timezone} onChange={e => onTimezoneChange(e.target.value)} title="Change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-none focus:ring-0 cursor-pointer appearance-none pr-2">
-                    {TIMEZONES.map(tz => (
-                        <option key={tz.value} value={tz.value} className="bg-slate-800 text-white">{tz.label}</option>
-                    ))}
-                </select>
+                <button onClick={handleTimezoneClick} title="Change timezone" className="text-lg md:text-2xl font-mono text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer p-0">
+                    {currentLabel}
+                </button>
             </div>
         );
     });
 
     const TimeElapsed = React.memo(({ startTime, totalElapsedSeconds }) => {
-        const [elapsed, setElapsed] = useState('00:00:00');
+        const [elapsed, setElapsed] = useState('00:00:00'); // Initialize with a non-null value
         const animationFrameRef = useRef();
         const formatTime = useCallback((s) => new Date(s * 1000).toISOString().substr(11, 8), []);
 
@@ -562,7 +637,7 @@
             return () => { isMounted = false; cancelAnimationFrame(animationFrameRef.current); };
         }, [startTime, totalElapsedSeconds, formatTime]);
         
-        return <span className="text-xs font-mono bg-slate-700/50 text-amber-300 px-2 py-1 rounded">{elapsed}</span>;
+        return <span className="text-sm font-mono bg-slate-700/50 text-amber-300 px-2 py-1 rounded">{elapsed}</span>;
     });
 
     // --- Reminder Countdown Component (Memoized) ---
@@ -635,8 +710,11 @@
         }, [item.text]);
 
         const handleBlur = () => {
-            if (text !== item.text) { // Only update if there's a change
-                onUpdate(item.id, { text });
+            const trimmedText = text.trim();
+            if (trimmedText === '') {
+                onDelete(item.id); // Delete if the item is left blank
+            } else if (trimmedText !== item.text) { // Only update if there's a meaningful change
+                onUpdate(item.id, { text: trimmedText });
             }
         };
 
@@ -689,10 +767,10 @@
                     type="text" 
                     value={text} 
                     onChange={e => setText(e.target.value)} 
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={handleKeyDown} 
                     onBlur={handleBlur}
                     readOnly={isLocked}
-                    className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} focus:bg-slate-700 read-only:cursor-default`} 
+                    className={`flex-grow min-w-0 bg-transparent text-sm p-1 rounded-md transition-colors ${item.completed ? 'text-slate-500 line-through' : 'text-slate-300'} ${!isLocked ? 'hover:bg-slate-700/50' : ''} focus:bg-slate-700 read-only:cursor-default`} 
                 />
                 {item.completed && item.completedAt && (
                     <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
@@ -712,8 +790,8 @@
     });
 
     // --- Task Card Component ---
-    const TaskCard = ({ task, clockTimezone }) => {
-        const { updateTask, deleteTask, allTags, settings, setTaskToDelete, activeTags } = useAppContext();
+    const TaskCard = ({ task, clockTimezone, startInEditMode, onEditModeEnd, isDetailedView }) => {
+        const { tasks, updateTask, deleteTask, allTags, settings, setTaskToDelete, activeTags } = useAppContext();
         const now = useNow();
         const isLocked = task.status === TASK_STATUS.DONE;
         const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
@@ -725,11 +803,60 @@
         const [focusedItemId, setFocusedItemId] = useState(null);
         const draggedChecklistItemId = useRef(null); // Use ref to avoid re-renders during drag
         const notesTextareaRef = useRef(null); // Ref for the notes textarea
-        const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
+        const titleInputRef = useRef(null); // Ref for the title input
+        const [isChecklistExpanded, setIsChecklistExpanded] = useState(true);
+        const [dueDateInput, setDueDateInput] = useState('');
+        const [tagInput, setTagInput] = useState('');
+        const [showResetTimeConfirm, setShowResetTimeConfirm] = useState(false);
+
+        const isBlocked = useMemo(() => {
+            if (!task.dependsOn || task.dependsOn.length === 0) return false;
+            return task.dependsOn.some(depId => {
+                const dependencyTask = tasks.find(t => t.id === depId);
+                // A task is blocked if any dependency exists and is not 'Completed'
+                return dependencyTask && dependencyTask.status !== TASK_STATUS.DONE;
+            });
+        }, [task.dependsOn, tasks]);
+
+        const isUnlocked = useMemo(() => {
+            // A task is "unlocked" if it's not done, has dependencies, but is not currently blocked.
+            if (isLocked || !task.dependsOn || task.dependsOn.length === 0) return false;
+            return !isBlocked;
+        }, [isLocked, task.dependsOn, isBlocked]);
+
+        const blockedTasks = useMemo(() => {
+            return tasks.filter(t => t.dependsOn?.includes(task.id));
+        }, [tasks, task.id]);
+
+        // State for the downstream add UI
+        const [isAddingDownstream, setIsAddingDownstream] = useState(false);
+        const addDownstreamInputRef = useRef(null);
+
+        useEffect(() => { setDueDateInput(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : ''); }, [task.dueDate]);
         
         useEffect(() => { setChecklist(task.checklist || []); }, [task.checklist]);
         useEffect(() => { setTitle(task.title); }, [task.title]);
         useEffect(() => { setNotes(task.notes || ''); }, [task.notes]); // Sync notes state with prop
+
+        useEffect(() => {
+            if (startInEditMode) {
+                setIsEditingTitle(true);
+                // Callback to reset the state in the parent component
+                if (onEditModeEnd) onEditModeEnd();
+            }
+        }, [startInEditMode, onEditModeEnd]);
+
+        useEffect(() => {
+            if (isEditingTitle && titleInputRef.current) {
+                titleInputRef.current.focus();
+            }
+        }, [isEditingTitle]);
+
+        useEffect(() => {
+            if (isAddingDownstream && addDownstreamInputRef.current) {
+                addDownstreamInputRef.current.focus();
+            }
+        }, [isAddingDownstream]);
 
         // Effect to auto-resize the notes textarea
         useEffect(() => {
@@ -750,7 +877,7 @@
         const handleUpdateChecklist = useCallback((updatedList) => {
             // Checklist updates no longer automatically change task status.
             // Status is now manually set via the dropdown.
-            updateTask(task.id, { checklist: updatedList });
+            updateTask(task.id, { checklist: updatedList }, 'Checklist updated.');
         }, [task.id, updateTask]);
         
         const handleItemUpdate = (id, values) => handleUpdateChecklist(checklist.map(i => i.id === id ? { ...i, ...values } : i));
@@ -769,7 +896,12 @@
             newChecklist.splice(currentIndex + 1, 0, { id: newId, text: '', completed: false });
             handleUpdateChecklist(newChecklist);
         }, [checklist, handleUpdateChecklist]);
-        const handleTitleBlur = () => { setIsEditingTitle(false); if (title !== task.title) updateTask(task.id, { title }); };
+        const handleTitleBlur = () => {
+            setIsEditingTitle(false);
+            const trimmedTitle = title.trim();
+            const finalTitle = trimmedTitle === '' ? 'Untitled Task' : trimmedTitle;
+            if (finalTitle !== task.title) updateTask(task.id, { title: finalTitle }, 'Title was changed.');
+        };
         const handleTitleKeyDown = (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTitleBlur(); } };
         
         const handleSetPriority = (priorityToSet) => {
@@ -781,12 +913,102 @@
         const handleCompletionToggle = () => {
             const isCurrentlyDone = task.status === TASK_STATUS.DONE;
             if (isCurrentlyDone) {
-                updateTask(task.id, { status: TASK_STATUS.TO_DO });
+                updateTask(task.id, { status: TASK_STATUS.TO_DO }, 'Task status changed to To Do.');
             } else {
                 updateTask(task.id, { status: TASK_STATUS.DONE, reminderAt: null, reminderFired: false });
             }
         };
         
+        // --- Time Tracking Handlers ---
+        const handleToggleTimer = () => {
+            if (task.timingSessionStartTime) {
+                // Stop the timer
+                const sessionSeconds = (new Date().getTime() - new Date(task.timingSessionStartTime).getTime()) / 1000;
+                updateTask(task.id, {
+                    timingSessionStartTime: null,
+                    timeSpentSeconds: (task.timeSpentSeconds || 0) + sessionSeconds
+                });
+            } else {
+                // Start the timer
+                updateTask(task.id, { timingSessionStartTime: new Date().toISOString() });
+            }
+        };
+
+        const handleResetTimer = () => {
+            updateTask(task.id, {
+                timeSpentSeconds: 0,
+                timingSessionStartTime: null
+            }, 'Time tracking was reset.');
+            setShowResetTimeConfirm(false);
+        };
+        
+        const handleDueDateChange = (e) => {
+            const newDateValue = e.target.value;
+            setDueDateInput(newDateValue);
+
+            if (newDateValue) {
+                const date = new Date(newDateValue);
+                date.setUTCHours(23, 59, 59, 999); // Set to end of day in UTC to avoid timezone issues
+                updateTask(task.id, { dueDate: date.toISOString() }, `Due date set to ${date.toLocaleDateString()}.`);
+            } else {
+                updateTask(task.id, { dueDate: null }, 'Due date was removed.');
+            }
+        };
+
+        const handleTagKeyDown = (e) => {
+            if (e.key === 'Enter' && tagInput.trim() !== '') {
+                e.preventDefault();
+                const newTags = [...new Set([...(task.tags || []), tagInput.trim()])];
+                updateTask(task.id, { tags: newTags }, `Tag "${tagInput.trim()}" added.`);
+                setTagInput('');
+            }
+        };
+
+        const handleRemoveTag = (tagToRemove) => {
+            const newTags = (task.tags || []).filter(t => t !== tagToRemove);
+            updateTask(task.id, { tags: newTags });
+        }; // This is a minor action, maybe doesn't need a log.
+
+
+        const handleRemoveDependency = (depId) => {
+            const dependencyTask = tasks.find(t => t.id === depId);
+            updateTask(task.id, { 
+                dependsOn: task.dependsOn.filter(id => id !== depId) 
+            }, `Removed dependency on "${dependencyTask.title}".`);
+        };
+
+        const handleAddDownstreamDependency = (e) => {
+            const taskToBlockId = e.target.value;
+            if (!taskToBlockId) return;
+
+            // --- Circular Dependency Check ---
+            // A task cannot block another task that is already in its own upstream.
+            const isCircular = (taskId, targetId) => {
+                const taskToCheck = tasks.find(t => t.id === taskId);
+                if (!taskToCheck || !taskToCheck.dependsOn) return false;
+                if (taskToCheck.dependsOn.includes(targetId)) return true;
+                return taskToCheck.dependsOn.some(depId => isCircular(depId, targetId));
+            };
+
+            if (isCircular(task.id, taskToBlockId)) {
+                alert("Circular dependency detected! A task cannot block one of its own upstream dependencies.");
+                e.target.value = '';
+                return;
+            }
+
+            const taskToBlock = tasks.find(t => t.id === taskToBlockId);
+            if (taskToBlock) {
+                const newDependsOn = [...(taskToBlock.dependsOn || []), task.id];
+                updateTask(taskToBlock.id, { dependsOn: newDependsOn }, `Is now blocked by "${task.title}".`);
+            }
+        };
+
+        const handleRemoveDownstreamDependency = (taskToUnblockId) => {
+            const taskToUnblock = tasks.find(t => t.id === taskToUnblockId);
+            const newDependsOn = taskToUnblock.dependsOn.filter(id => id !== task.id);
+            updateTask(taskToUnblock.id, { dependsOn: newDependsOn }, `Is no longer blocked by "${task.title}".`);
+        };
+
         // Drag and Drop Handlers for Checklist Items
         const handleDropChecklistItem = useCallback((draggedId, targetId) => {
             const draggedIndex = checklist.findIndex(item => item.id === draggedId);
@@ -813,21 +1035,70 @@
         const textSize = 'text-sm';
         
         return (
-            <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''}`}>
-                {/* --- Header: Project, Title, Priority --- */}
+            !isDetailedView ? (
+                // --- Project View Card (3-Column Layout) ---
+                <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-md transition-shadow duration-300 ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/50' : ''}`}>
+                    <div className="px-4 pt-3 pb-2 border-b border-slate-700/50">
+                        <div className="flex items-center gap-2">
+                            {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
+                            {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
+                            <h3 className={`font-semibold text-slate-100 break-words text-base ${isLocked ? 'line-through text-slate-500' : ''}`}>{task.title}</h3>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-4 divide-x divide-slate-700 text-center">
+                        {/* Column 1: Priority */}
+                        <div className="p-3">
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Priority</div>
+                            <div className={`text-sm font-bold rounded-md py-1 ${PRIORITY_CONFIG[task.priority]?.color || 'text-slate-300'}`}>
+                                {PRIORITY_CONFIG[task.priority]?.title || 'N/A'}
+                            </div>
+                        </div>
+                        {/* Column 2: Time Tracking */}
+                        <div className="p-3">
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time Spent</div>
+                            <TimeElapsed startTime={task.timingSessionStartTime} totalElapsedSeconds={task.timeSpentSeconds} />
+                        </div>
+                        {/* Column 3: Task Size */}
+                        <div className="p-3">
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Size</div>
+                            <div className="text-sm font-bold text-slate-300 py-1">
+                                {task.size ? TASK_SIZES[task.size] : 'N/A'}
+                            </div>
+                        </div>
+                        {/* Column 4: Due Date */}
+                        <div className="p-3">
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Due Date</div>
+                            <div className={`text-sm font-bold py-1 ${task.dueDate && new Date(task.dueDate) < new Date() ? 'text-red-400' : 'text-slate-300'}`}>
+                                {task.dueDate 
+                                    ? new Date(task.dueDate).toLocaleDateString([], { month: 'numeric', day: 'numeric' }) 
+                                    : 'N/A'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+            // --- Detailed View Card (Existing Layout) ---
+            <>
+            <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/80' : ''}`}>
+                {/* --- Header: Title & Priority --- */}
                 <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
                     <div className="flex justify-between items-center mb-1">
                         {/* Task Title */}
                         <div className="flex-grow min-w-0 mr-4">
                             {isEditingTitle ? (
-                                <input type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className={`w-full bg-slate-900/50 rounded-md py-1 text-slate-50 font-semibold text-lg border border-slate-600 focus:ring-2 focus:ring-sky-500`} />
+                                <input ref={titleInputRef} type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} className={`w-full bg-slate-900/50 rounded-md py-1 text-slate-50 font-semibold text-lg border border-slate-600 focus:ring-2 focus:ring-sky-500`} />
                             ) : (
-                                <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-semibold text-slate-50 break-words text-lg ${isLocked ? 'cursor-default line-through text-slate-500' : 'cursor-pointer'}`}>{task.title}</h3>
+                                <div className="flex items-center gap-2">
+                                    {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
+                                    {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
+                                    <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-semibold text-slate-50 break-words text-lg rounded-md transition-colors ${isLocked ? 'cursor-default line-through text-slate-500' : 'cursor-pointer hover:bg-slate-700/50 px-2 -mx-2 py-1 -my-1'}`}>{task.title}</h3>
+                                </div>
                             )}
                         </div>
 
                         {/* Priority Dots */}
-                        <div className="flex items-center space-x-2 flex-shrink-0">
+                        {isDetailedView && <div className="flex items-center space-x-2 flex-shrink-0">
                             <span className="text-xs text-slate-400">Priority:</span>
                             {DISPLAY_PRIORITY_ORDER.map(pConst => {
                                 const config = PRIORITY_CONFIG[pConst];
@@ -842,27 +1113,29 @@
                                     ></button>
                                 );
                             })}
-                        </div>
+                        </div>}
                     </div>
                 </div>
 
                 <div className="px-4 pb-3 space-y-3">
                     {/* --- Notes Section --- */}
-                    <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
-                        <h4 className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Notes</h4>
-                        <textarea
-                            ref={notesTextareaRef}
-                            value={notes}
-                            onChange={e => setNotes(e.target.value)}
-                            onBlur={() => updateTask(task.id, { notes })}
-                            placeholder="Notes..."
-                            disabled={isLocked}
-                            className={`w-full bg-transparent text-slate-300 p-1 rounded-md border border-transparent focus:bg-slate-900/80 focus:border-slate-600 focus:ring-0 resize-none overflow-hidden ${textSize} placeholder-slate-500 disabled:cursor-not-allowed`}
-                        ></textarea>
-                    </div>
+                    {isDetailedView && (
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+                            <h4 className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Notes</h4>
+                            <textarea
+                                ref={notesTextareaRef}
+                                value={notes}
+                                onChange={e => setNotes(e.target.value)}
+                                onBlur={() => { if (notes !== task.notes) updateTask(task.id, { notes }, 'Notes were updated.')} }
+                                placeholder="Notes..."
+                                disabled={isLocked}
+                                className={`w-full bg-transparent text-slate-300 p-1 rounded-md border border-transparent focus:bg-slate-900/80 focus:border-slate-600 focus:ring-0 resize-none overflow-hidden ${textSize} placeholder-slate-500 disabled:cursor-not-allowed ${!isLocked ? 'hover:bg-slate-900/80' : ''}`}
+                            ></textarea>
+                        </div>
+                    )}
 
                     {/* --- Checklist Section --- */}
-                    {(checklist.length > 0 || !isLocked) && (
+                    {(isDetailedView || checklist.length > 0 || !isLocked) && (
                         <div className="bg-slate-900/40 rounded-lg border border-slate-700/50">
                             <button onClick={() => setIsChecklistExpanded(p => !p)} className="w-full flex justify-between items-center p-3 text-left">
                                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Checklist ({checklist.length})</h4>
@@ -889,11 +1162,194 @@
                         </div>
                     )}
                     
+                    {/* --- Time Tracking Section (Detailed View Only) --- */}
+                    {isDetailedView && (
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+                            <h4 className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Time Tracking</h4>
+                            <div className="flex items-center justify-between gap-2">
+                                <TimeElapsed startTime={task.timingSessionStartTime} totalElapsedSeconds={task.timeSpentSeconds} />
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setShowResetTimeConfirm(true)}
+                                        disabled={isLocked || (!task.timeSpentSeconds && !task.timingSessionStartTime)}
+                                        title="Reset timer"
+                                        className="p-2 text-sm font-semibold rounded-md transition-colors text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    </button>
+                                    <button 
+                                        onClick={handleToggleTimer} 
+                                        disabled={isLocked}
+                                        className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${task.timingSessionStartTime ? 'bg-red-500/80 hover:bg-red-500 text-white' : 'bg-green-500/80 hover:bg-green-500 text-white'}`}
+                                    >
+                                        {task.timingSessionStartTime ? <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16"><path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg>}
+                                        {task.timingSessionStartTime ? 'Stop' : 'Start'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- Due Date & Tags Section (Detailed View Only) --- */}
+                    {isDetailedView && (
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50 space-y-3">
+                            {/* Due Date */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Due Date</h4>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="date"
+                                        value={dueDateInput}
+                                        onChange={handleDueDateChange}
+                                        disabled={isLocked}
+                                        className="w-full bg-slate-700 text-slate-100 text-sm p-1.5 rounded-md border border-slate-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
+                                    />
+                                    {task.dueDate && (
+                                        <span className={`text-xs font-semibold px-2 py-1 rounded-md whitespace-nowrap ${new Date(task.dueDate) < new Date() ? 'bg-red-500/30 text-red-300' : 'bg-slate-700 text-slate-300'}`}>
+                                            {Math.ceil((new Date(task.dueDate) - new Date()) / (1000 * 60 * 60 * 24))} days left
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {/* Tags */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tags</h4>
+                                <div className="flex flex-wrap gap-2 items-center">
+                                    {(task.tags || []).map(tag => {
+                                        const tagHash = tag.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+                                        const colors = ['bg-red-500/80', 'bg-yellow-500/80', 'bg-green-500/80', 'bg-blue-500/80', 'bg-indigo-500/80', 'bg-purple-500/80', 'bg-pink-500/80'];
+                                        const colorClass = colors[Math.abs(tagHash % colors.length)];
+                                        return (
+                                            <span key={tag} className={`flex items-center gap-1 text-xs font-semibold text-white px-2 py-1 rounded-full ${colorClass}`}>
+                                                {tag}
+                                                {!isLocked && <button onClick={() => handleRemoveTag(tag)} className="opacity-70 hover:opacity-100">&times;</button>}
+                                            </span>
+                                        );
+                                    })}
+                                    {!isLocked && <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleTagKeyDown} placeholder="+ Add tag"
+                                        className="bg-transparent text-slate-300 text-xs p-1 focus:ring-0 focus:outline-none border-b border-dashed border-slate-600 focus:border-solid focus:border-sky-500"
+                                    />}
+                                </div>
+                            </div>
+                            {/* Task Size */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Task Size</h4>
+                                <select
+                                    value={task.size || ''}
+                                    onChange={(e) => updateTask(task.id, { size: e.target.value || null })}
+                                    disabled={isLocked}
+                                    className="w-full bg-slate-800 text-slate-200 text-sm p-1.5 rounded-md border border-slate-600 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
+                                >
+                                    <option value="">Not Set</option>
+                                    {Object.entries(TASK_SIZES).map(([key, value]) => (
+                                        <option key={key} value={key}>{value}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- Dependencies Section (Detailed View Only) --- */}
+                    {isDetailedView && (
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50 space-y-3">
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                                <label className="text-sm font-semibold text-slate-300">Upstream</label>
+                                <label className="text-sm font-semibold text-slate-300">Current Task</label>
+                                <div className="flex items-center justify-center gap-2">
+                                    <label className="text-sm font-semibold text-slate-300">Downstream</label>
+                                    {!isLocked && (
+                                        <button onClick={() => setIsAddingDownstream(p => !p)} title="Add downstream dependency" className="text-sky-400 hover:text-sky-300">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                                {/* Upstream Column */}
+                                <div className="flex-1 space-y-2">
+                                    {(task.dependsOn || []).length > 0 ? (
+                                        <div className="space-y-2">
+                                            {(task.dependsOn || []).map(depId => {
+                                                const depTask = tasks.find(t => t.id === depId);
+                                                if (!depTask) return null;
+                                                const isDepDone = depTask.status === TASK_STATUS.DONE;
+                                                return (
+                                                    <div key={depId} className="bg-slate-800/70 p-3 rounded-md text-sm text-center min-h-[52px] flex items-center justify-center">
+                                                        <span className={`${isDepDone ? 'line-through text-slate-500' : 'text-slate-200'}`}>{depTask.title}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>}
+                                </div>
+
+                                {/* Arrow 1 */}
+                                <div className="flex-shrink-0 flex items-center h-[52px]">
+                                    <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                                </div>
+
+                                {/* Current Task Column */}
+                                <div className="flex-1 w-1/3">
+                                    <div className="bg-sky-900/50 border border-sky-700 p-3 rounded-md text-sm text-center min-h-[52px] flex items-center justify-center">
+                                        <span className="font-bold text-sky-200">{task.title}</span>
+                                    </div>
+                                </div>
+
+                                {/* Arrow 2 */}
+                                <div className="flex-shrink-0 flex items-center h-[52px]">
+                                    <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                                </div>
+
+                                {/* Downstream Column */}
+                                <div className="flex-1 space-y-2">
+                                    {blockedTasks.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {blockedTasks.map(blockedTask => (
+                                                <div key={blockedTask.id} className="flex items-center justify-between bg-slate-800/70 p-3 rounded-md text-sm text-center min-h-[52px]">
+                                                    <span className="text-slate-200 flex-grow">{blockedTask.title}</span>
+                                                    {!isLocked && <button onClick={() => handleRemoveDownstreamDependency(blockedTask.id)} className="text-slate-500 hover:text-red-400 ml-2 flex-shrink-0">&times;</button>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : <div className="text-xs text-slate-500 text-center italic min-h-[52px] flex items-center justify-center">None</div>}
+                                    {isAddingDownstream && !isLocked && (
+                                        <select ref={addDownstreamInputRef} onChange={handleAddDownstreamDependency} onBlur={() => setIsAddingDownstream(false)} className="w-full bg-slate-800 text-slate-200 text-sm p-1.5 rounded-md border border-slate-600 focus:ring-1 focus:ring-sky-500">
+                                            <option value="">+ Block another task...</option>
+                                            {tasks.filter(t => t.id !== task.id && t.status !== TASK_STATUS.DONE && !t.dependsOn?.includes(task.id)).map(t => (
+                                                <option key={t.id} value={t.id}>{t.title}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- Activity Log Section (Detailed View Only) --- */}
+                    {isDetailedView && (task.activityLog || []).length > 0 && (
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+                            <h4 className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Activity Log</h4>
+                            <div className="space-y-2 max-h-[6.5rem] overflow-y-auto pr-2">
+                                {[...(task.activityLog || [])].reverse().map((log, index) => (
+                                    <div key={index} className="flex justify-between items-center text-xs">
+                                        <p className="text-slate-300">{log.message}</p>
+                                        <p className="text-slate-500 whitespace-nowrap pl-4">
+                                            {new Date(log.timestamp).toLocaleString([], { 
+                                                timeZone: clockTimezone, 
+                                                month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+                                            })}
+                                        </p>
+                                    </div>
+                                        ))}
+                                    </div>
+                        </div>
+                    )}
+
                     {task.reminderAt && (
                         <div className="pt-2 text-xs">
                             <div className="text-sky-300 flex justify-between items-center mb-0.5">
                                 <span>
-                                    Set for: {new Date(task.reminderAt).toLocaleTimeString([], {
+                                    Reminder: {new Date(task.reminderAt).toLocaleTimeString([], {
                                         timeZone: clockTimezone,
                                         hour: '2-digit', minute:'2-digit', second: '2-digit'
                                     })} {clockTimezone}
@@ -903,39 +1359,82 @@
                             <ReminderCountdown reminderAt={task.reminderAt} />
                         </div>
                     )}
-                    <div className="pt-3 border-t border-slate-700/50 flex justify-between items-center">
-                        <select 
-                            value={task.project || ''} 
-                            onChange={(e) => updateTask(task.id, { project: e.target.value || null })}
-                            disabled={isLocked}
-                            className="text-sm bg-slate-800 text-slate-200 px-2 py-1 rounded-md border border-slate-600 hover:bg-slate-700 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                            <option value="">Unassigned</option>
-                            {allTags.map(project => (
-                                <option key={project} value={project}>{project}</option>
-                            ))}
-                        </select>
-                        <div className="flex items-center space-x-2">
-                            <button 
-                                onClick={handleCompletionToggle} 
-                                title={isLocked ? "Mark as 'To Do'" : "Mark as 'Done'"} 
-                                className={`p-1 rounded-full transition-colors ${isLocked ? 'bg-green-500 text-white' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'}`}
+                    {isDetailedView && (
+                        <div className="pt-3 border-t border-slate-700/50 space-y-3">
+                            {/* Metadata */}
+                            <div className="text-xs text-slate-500 space-y-1">
+                                <div className="flex justify-between">
+                                    <span>Created:</span>
+                                    <span>{new Date(task.createdAt || task.timestamp).toLocaleString([], { timeZone: clockTimezone, dateStyle: 'medium', timeStyle: 'short' })}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>Last Updated:</span>
+                                    <span>{new Date(task.timestamp).toLocaleString([], { timeZone: clockTimezone, dateStyle: 'medium', timeStyle: 'short' })}</span>
+                                </div>
+                            </div>
+                            {/* Actions */}
+                            <div className="flex justify-between items-center">
+                            <select 
+                                value={task.project || ''} 
+                                onChange={(e) => updateTask(task.id, { project: e.target.value || null })}
+                                disabled={isLocked}
+                                className="text-sm bg-slate-800 text-slate-200 px-2 py-1 rounded-md border border-slate-600 hover:bg-slate-700 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                                <CheckIcon />
-                            </button>
-                            <button onClick={handleDeleteRequest} title="Delete Permanently" className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button>
+                                <option value="">Unassigned</option>
+                                {allTags.map(project => (
+                                    <option key={project} value={project}>{project}</option>
+                                ))}
+                            </select>
+                            <div className="flex items-center space-x-2">
+                                <button 
+                                    onClick={handleCompletionToggle} 
+                                    title={isBlocked ? "Task is blocked by a dependency" : (isLocked ? "Mark as 'To Do'" : "Mark as 'Completed'")} 
+                                    disabled={isBlocked && !isLocked}
+                                    className={`p-1 rounded-full transition-colors ${isLocked ? 'bg-green-500 text-white' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'} disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent`}
+                                >
+                                    <CheckIcon />
+                                </button>
+                                <button onClick={handleDeleteRequest} title="Delete Permanently" className="text-red-400 hover:text-white transition-colors p-1 rounded-full hover:bg-red-500"><DeleteIcon /></button>
+                            </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
+            {showResetTimeConfirm && (
+                <Modal onClose={() => setShowResetTimeConfirm(false)}>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-white mb-2">Reset Time?</h3>
+                        <p className="text-slate-300 mb-4">Are you sure you want to reset the tracked time for this task? This cannot be undone.</p>
+                        <div className="flex justify-center space-x-4"><button onClick={() => setShowResetTimeConfirm(false)} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={handleResetTimer} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Reset</button></div>
+                    </div>
+                </Modal>
+            )}
+            </>
+            )
         );
     };
     const MemoizedTaskCard = React.memo(TaskCard);
 
     // --- New Components for Master-Detail Layout ---
     const TaskListItem = React.memo(({ task, isSelected, onSelect }) => {
+        const { tasks: allTasks } = useAppContext(); // Get all tasks to check dependencies
         const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.null;
         const isDone = task.status === TASK_STATUS.DONE;
+
+        const isBlocked = useMemo(() => {
+            if (isDone || !task.dependsOn || task.dependsOn.length === 0) return false;
+            return task.dependsOn.some(depId => {
+                const dependencyTask = allTasks.find(t => t.id === depId);
+                return dependencyTask && dependencyTask.status !== TASK_STATUS.DONE;
+            });
+        }, [task.dependsOn, allTasks, isDone]);
+
+        const isUnlocked = useMemo(() => {
+            // A task is "unlocked" if it's not done, has dependencies, but is not currently blocked.
+            if (isDone || !task.dependsOn || task.dependsOn.length === 0) return false;
+            return !isBlocked;
+        }, [isDone, task.dependsOn, isBlocked]);
 
         return (
             <button
@@ -943,10 +1442,32 @@
                 className={`w-full text-left p-3 rounded-lg border transition-all duration-150 ${isSelected ? 'bg-sky-500/30 border-sky-400 shadow-lg' : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-500'}`}
             >
                 <div className="flex justify-between items-start gap-2">
-                    <p className={`flex-grow font-semibold break-words ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                        {task.title}
-                    </p>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${priorityConfig.color} ${priorityConfig.bgColor} ${priorityConfig.borderColor} flex-shrink-0`}>
+                    <div className="flex-grow min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
+                            {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
+                            <p className={`font-semibold break-words ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>{task.title}</p>
+                        </div>
+                        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap mt-1.5 text-xs">
+                        {task.dueDate && (
+                            <span className={`font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${new Date(task.dueDate) < new Date() && !isDone ? 'bg-red-500/30 text-red-300 border border-red-500/50' : 'bg-slate-700/50 text-slate-300 border border-slate-600'}`}>
+                                {new Date(task.dueDate).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                            </span>
+                        )}
+                        {task.size && (
+                            <span className="font-semibold px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-300 border border-slate-600 whitespace-nowrap">
+                                {TASK_SIZES[task.size]}
+                            </span>
+                        )}
+                        {(task.tags || []).map(tag => {
+                            const tagHash = tag.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+                            const colors = ['bg-red-900/70 text-red-300', 'bg-yellow-900/70 text-yellow-300', 'bg-green-900/70 text-green-300', 'bg-blue-900/70 text-blue-300', 'bg-indigo-900/70 text-indigo-300', 'bg-purple-900/70 text-purple-300', 'bg-pink-900/70 text-pink-300'];
+                            const colorClass = colors[Math.abs(tagHash % colors.length)];
+                            return <span key={tag} className={`font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${colorClass}`}>{tag}</span>
+                        })}
+                        </div>
+                    </div>
+                    <span className={`font-bold px-2 py-0.5 rounded-full border ${priorityConfig.color} ${priorityConfig.bgColor} ${priorityConfig.borderColor} flex-shrink-0 text-xs self-center`}>
                         {priorityConfig.title}
                     </span>
                 </div>
@@ -954,7 +1475,7 @@
         );
     });
 
-    const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, clockTimezone, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask }) => {
+    const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask, onShowGraphView }) => {
         const { projectSettings, collapsedProjects, toggleProjectCollapse } = useAppContext();
         const groupedAndSortedTasks = useMemo(() => { // This logic is correct, no changes needed here.
             // Manual sorting by rank is now the primary method.
@@ -1014,7 +1535,10 @@
                                 <div onClick={() => onProjectHeaderClick(projectName)} className="flex-grow cursor-pointer hover:bg-white/5 p-2 rounded-md">
                                     <span className="text-indigo-300 hover:underline">{projectName} ({tasksInGroup.length})</span>
                                 </div>
-                                {projectName !== 'Completed' && <button onClick={() => onAddTask(projectName)} title={`Add task to ${projectName}`} className="p-1 text-sky-300 hover:text-white rounded-full hover:bg-sky-500/30 transition-colors flex-shrink-0 mx-2"><PlusIcon /></button>}
+                                {projectName !== 'Completed' && <>
+                                    <button onClick={() => onShowGraphView(projectName)} title={`Show dependency graph for ${projectName}`} className="p-1 text-indigo-300 hover:text-white rounded-full hover:bg-indigo-500/30 transition-colors flex-shrink-0 mx-1"><GraphIcon /></button>
+                                    <button onClick={() => onAddTask(projectName)} title={`Add task to ${projectName}`} className="p-1 text-sky-300 hover:text-white rounded-full hover:bg-sky-500/30 transition-colors flex-shrink-0 mx-1"><PlusIcon /></button>
+                                </>}
                                 {projectName === 'Completed' && (
                                     <button onClick={onShowDeleteAllModal} title="Delete All Completed Tasks" className="p-1 text-red-400 hover:text-white rounded-full hover:bg-red-500/30 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" disabled={completedTasksCount === 0}>
                                         <DeleteIcon />
@@ -1057,6 +1581,8 @@
         const [showNewProjectModal, setShowNewProjectModal] = useState(false);
         const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
         const [selectedProjectName, setSelectedProjectName] = useState(null);
+        const [graphViewProject, setGraphViewProject] = useState(null);
+        const [taskToComplete, setTaskToComplete] = useState(null);
         const windowWidth = useWindowWidth();
         // --- Effect for showing release notes once per version ---
 
@@ -1081,18 +1607,35 @@
         // --- Effect for Global Keyboard Shortcuts ---
         useEffect(() => {
             const handleKeyDown = (e) => {
-                // Use 'a' key to open Add Task modal. Avoid when typing in an input.
-                if (e.key.toLowerCase() === 'a' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+                // Ignore shortcuts if user is typing in an input field
+                if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+                    return;
+                }
+
+                // Use 'd' key to delete the currently selected task
+                if (e.key.toLowerCase() === 'd' && selectedTaskId) {
                     e.preventDefault();
-                    setShowAddTaskModal(true);
+                    if (settings.confirmOnDelete) {
+                        setTaskToDelete(selectedTaskId);
+                    } else {
+                        deleteTask(selectedTaskId);
+                    }
+                }
+
+                // Use 'c' key to complete the currently selected task
+                if (e.key.toLowerCase() === 'c' && selectedTaskId) {
+                    e.preventDefault();
+                    // Find the task to show its title in the modal
+                    const task = tasks.find(t => t.id === selectedTaskId);
+                    if (task && task.status !== TASK_STATUS.DONE) {
+                        setTaskToComplete(task);
+                    }
                 }
             };
 
             window.addEventListener('keydown', handleKeyDown);
-            return () => {
-                window.removeEventListener('keydown', handleKeyDown);
-            };
-        }, []); // Empty dependency array ensures this runs only once
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }, [selectedTaskId, settings.confirmOnDelete, setTaskToDelete, deleteTask, tasks, setTaskToComplete]);
 
         const activeTasksCount = useMemo(() => tasks.filter(t => t.status !== TASK_STATUS.DONE).length, [tasks]);
 
@@ -1147,6 +1690,13 @@
             setTaskToDelete(null); // This is correct
         }, [taskToDelete, deleteTask]);
 
+        const handleConfirmComplete = useCallback(() => {
+            if (!taskToComplete) return;
+            // This is the same logic as in the TaskCard's completion toggle
+            updateTask(taskToComplete.id, { status: TASK_STATUS.DONE, reminderAt: null, reminderFired: false });
+            setTaskToComplete(null);
+        }, [taskToComplete, updateTask]);
+
         const handleCreateProject = (projectName) => {
             if (projectName && projectName.trim()) {
                 const newTask = addTask('New Task', projectName.trim());
@@ -1174,89 +1724,82 @@
         // Effect to automatically hide empty swimlanes if autoCollapse is enabled (and they are empty after filtering)
 
         const generateCompletedTasksSummary = useCallback(() => {
-            const localeOptions = {
-                year: 'numeric', month: 'numeric', day: 'numeric',
-                hour: 'numeric', minute: 'numeric', second: 'numeric',
-                hour12: true,
-                timeZone: clockTimezone
-            };
+            const localeOptions = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: clockTimezone };
+            const formatTime = (dateString) => new Date(dateString).toLocaleString('en-US', localeOptions);
 
-            let summary;
+            let summary = `Taiko Task Summary\n`;
+            summary += `   Generated: ${formatTime(new Date())} (${TIMEZONES.find(tz => tz.value === clockTimezone)?.label || clockTimezone})\n\n`;
 
             if (tasks.length === 0) {
-                summary = "No tasks to summarize.";
-            } else {
-                summary = `--- Handover Report ---\n`;
-                summary += `Generated on: ${new Date().toLocaleString('en-US', localeOptions)} (${TIMEZONES.find(tz => tz.value === clockTimezone)?.label || clockTimezone})\n\n`;
-
-                const inProgressTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE).sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority));
-                const completedTasks = tasks.filter(t => t.status === TASK_STATUS.DONE).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                const groupTasksByProject = (tasksToGroup) => {
-                    const grouped = tasksToGroup.reduce((acc, task) => {
-                        const project = task.project || 'Unassigned';
-                        if (!acc[project]) {
-                            acc[project] = [];
-                        }
-                        acc[project].push(task);
-                        return acc;
-                    }, {});
-                    // Sort projects alphabetically, keeping 'Unassigned' first if it exists
-                    return Object.entries(grouped).sort(([a], [b]) => {
-                        if (a === 'Unassigned') return -1;
-                        if (b === 'Unassigned') return 1;
-                        return a.localeCompare(b);
-                    });
-                };
-
-                if (inProgressTasks.length > 0) {
-                    summary += `========================================\n`;
-                    summary += `IN PROGRESS TASKS (${inProgressTasks.length})\n`;
-                    const inProgressByProject = groupTasksByProject(inProgressTasks);
-
-                    inProgressByProject.forEach(([projectName, projectTasks]) => {
-                        summary += `\n--- Project: ${projectName} (${projectTasks.length}) ---\n`;
-                        projectTasks.forEach(task => {
-                            summary += `\n  - ${task.title}\n`;
-                            if (task.notes && task.notes.trim()) {
-                                summary += `    Notes: ${task.notes.trim().replace(/\n/g, '\n           ')}\n`;
-                            }
-                            const allSubtasks = (task.checklist || []).filter(item => item.text.trim());
-                            if (allSubtasks.length > 0) {
-                                allSubtasks.forEach(subtask => {
-                                    let subtaskLine = `    ${subtask.completed ? '[x]' : '[ ]'} ${subtask.text}`;
-                                    if (subtask.completed && subtask.completedAt) {
-                                        subtaskLine += ` (on: ${new Date(subtask.completedAt).toLocaleString('en-US', localeOptions)})`;
-                                    }
-                                    summary += `${subtaskLine}\n`;
-                                });
-                            }
-                        });
-                    });
-                }
-
-                if (completedTasks.length > 0) {
-                    summary += `\n========================================\n`;
-                    summary += `COMPLETED TASKS (${completedTasks.length})\n`;
-                    const completedByProject = groupTasksByProject(completedTasks);
-
-                    completedByProject.forEach(([projectName, projectTasks]) => {
-                        summary += `\n--- Project: ${projectName} (${projectTasks.length}) ---\n`;
-                        projectTasks.forEach(task => {
-                            summary += `\n  - ${task.title} - Completed at ${new Date(task.timestamp).toLocaleString('en-US', localeOptions)}\n`;
-                            if (task.notes && task.notes.trim()) {
-                                summary += `    Notes: ${task.notes.trim().replace(/\n/g, '\n           ')}\n`;
-                            }
-                            const completedSubtasks = (task.checklist || []).filter(item => item.completed && item.text.trim());
-                            if (completedSubtasks.length > 0) {
-                                completedSubtasks.forEach(subtask => {
-                                    summary += `      - ${subtask.text}\n`;
-                                });
-                            }
-                        });
-                    });
-                }
+                summary += "No tasks to summarize.";
+                setSummaryText(summary);
+                setShowSummaryModal(true);
+                return;
             }
+
+            const groupTasksByProject = (tasksToGroup) => {
+                const grouped = tasksToGroup.reduce((acc, task) => {
+                    const project = task.project || 'Unassigned';
+                    if (!acc[project]) acc[project] = [];
+                    acc[project].push(task);
+                    return acc;
+                }, {});
+                return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+            };
+
+            const buildSection = (title, tasksToProcess, isCompletedSection = false) => {
+                let sectionText = `${title} (${tasksToProcess.length})\n`;
+                if (tasksToProcess.length === 0) {
+                    sectionText += `   └─ No tasks in this section.\n`;
+                    return sectionText;
+                }
+
+                const projects = groupTasksByProject(tasksToProcess);
+
+                projects.forEach(([projectName, projectTasks], projectIndex) => {
+                    const isLastProject = projectIndex === projects.length - 1;
+                    const projectPrefix = isLastProject ? '└─' : '├─';
+                    sectionText += `${projectPrefix} ${projectName} (${projectTasks.length})\n`;
+
+                    projectTasks.forEach((task, taskIndex) => {
+                        const isLastTask = taskIndex === projectTasks.length - 1;
+                        const projectIndent = isLastProject ? '   ' : '│  ';
+                        const taskPrefix = isLastTask ? '└─' : '├─';
+                        let taskLine = `${projectIndent}${taskPrefix} ${isCompletedSection ? '☑' : '☐'} ${task.title}`;
+                        if (isCompletedSection) {
+                            taskLine += ` (Completed: ${formatTime(task.timestamp)})`;
+                        }
+                        sectionText += `${taskLine}\n`;
+
+                        const checklist = task.checklist || [];
+                        const taskIndent = `${projectIndent}${isLastTask ? '   ' : '│  '}`;
+
+                        if (task.notes && task.notes.trim()) {
+                            const notesPrefix = checklist.length > 0 ? '├─' : '└─';
+                            sectionText += `${taskIndent}${notesPrefix} Notes: ${task.notes.trim().replace(/\n/g, `\n${taskIndent}   `)}\n`;
+                        }
+
+                        checklist.forEach((item, itemIndex) => {
+                            const isLastItem = itemIndex === checklist.length - 1;
+                            const itemPrefix = isLastItem ? '└─' : '├─';
+                            let itemLine = `${taskIndent}${itemPrefix} ${item.completed ? '☑' : '☐'} ${item.text}`;
+                            if (item.completed && item.completedAt) {
+                                itemLine += ` (Completed: ${formatTime(item.completedAt)})`;
+                            }
+                            sectionText += `${itemLine}\n`;
+                        });
+                    });
+                });
+                return sectionText;
+            };
+
+            const inProgressTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE).sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority));
+            const completedTasks = tasks.filter(t => t.status === TASK_STATUS.DONE).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            summary += buildSection('In Progress', inProgressTasks, false);
+            summary += '\n';
+            summary += buildSection('Completed', completedTasks, true);
+
             setSummaryText(summary);
             setShowSummaryModal(true);
         }, [tasks, clockTimezone]);
@@ -1313,11 +1856,13 @@ const handleProjectHeaderClick = (projectName) => {
             <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: 'transparent' }}>
 
                 {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
+                {taskToComplete && <CompleteConfirmationModal onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} taskTitle={taskToComplete.title} />}
                 {showDeleteAllCompletedModal && <DeleteAllCompletedModal onConfirm={handleConfirmDeleteAllCompleted} onCancel={() => setShowDeleteAllCompletedModal(false)} count={completedTasksCount} />}
                 {showSummaryModal && <SummaryModal summary={summaryText} onClose={() => setShowSummaryModal(false)} />}
                 {showReleaseNotesModal && <ReleaseNotesModal version={CURRENT_APP_VERSION} releaseInfo={RELEASE_NOTES[CURRENT_APP_VERSION]} onClose={handleCloseReleaseNotes} />}
                 {showNewProjectModal && <NewProjectModal onAdd={handleCreateProject} onCancel={() => setShowNewProjectModal(false)} />}
                 {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
+                {graphViewProject && <DependencyGraphModal projectName={graphViewProject} allTasks={tasks} onClose={() => setGraphViewProject(null)} />}
                 {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
                 
                 <header className="sticky top-0 z-20 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
@@ -1365,19 +1910,21 @@ const handleProjectHeaderClick = (projectName) => {
                                     tasks={tasksMatchingActiveFilters}
                                     selectedTaskId={selectedTaskId}
                                     onSelectTask={(id) => { setSelectedTaskId(id); setSelectedProjectName(null); }} // This is correct
-                                    clockTimezone={clockTimezone}
+                                    onShowGraphView={setGraphViewProject}
                                     onProjectHeaderClick={handleProjectHeaderClick}
                                     selectedProjectName={selectedProjectName}
                                     onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} // Pass down the modal toggle
                                     onAddTask={(projectName) => { 
-                                        addTask('New Task', projectName); 
-                                        // Switch view to the project
-                                        setSelectedProjectName(projectName);
-                                        setSelectedTaskId(null);
+                                        // Create the new task and get it back
+                                        const newTask = addTask('', projectName); 
+                                        // Select the new task to show its detail view
+                                        setSelectedTaskId(newTask.id);
+                                        // Clear any project-wide view
+                                        setSelectedProjectName(null);
                                         // Ensure the project is expanded
                                         if (collapsedProjects[projectName]) toggleProjectCollapse(projectName);
                                     }}
-                                    completedTasksCount={completedTasksCount}
+                                    completedTasksCount={completedTasksCount} // This is correct
                                 />
                             </div>
 
@@ -1385,14 +1932,21 @@ const handleProjectHeaderClick = (projectName) => {
                             <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${showListViewOnMobile ? 'hidden' : ''}`}>
                                 {selectedProjectName ? (
                                     <div className="space-y-4">
-                                        {tasksForProjectView.length > 0 ? (
-                                            tasksForProjectView.map(task => <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} />)
-                                        ) : (
+                                        {tasksForProjectView.length > 0 ? ( // When viewing a project, isDetailedView is false (default)
+                                            tasksForProjectView.map(task => <MemoizedTaskCard key={task.id} task={task} clockTimezone={clockTimezone} isDetailedView={false} />)
+                                        ) : ( 
                                             <p className="text-slate-500 px-2">No tasks in this project.</p>
                                         )}
                                     </div>
                                 ) : selectedTask ? (
-                                    <MemoizedTaskCard key={selectedTask.id} task={selectedTask} clockTimezone={clockTimezone} />
+                                    // When viewing a single selected task, isDetailedView is true
+                                    <MemoizedTaskCard 
+                                        key={selectedTask.id} 
+                                        task={selectedTask} 
+                                        clockTimezone={clockTimezone}
+                                        startInEditMode={selectedTask.id === selectedTaskId && selectedTask.title === ''}
+                                        isDetailedView={true}
+                                    />
                                 ) : (
                                     <div className="h-full flex items-center justify-center text-slate-500 text-xl">
                                         Select a task or a project to see details
@@ -1669,6 +2223,103 @@ const handleProjectHeaderClick = (projectName) => {
             </Modal>
         );
     };
+    const DependencyGraphModal = ({ projectName, allTasks, onClose }) => {
+        const nodeRefs = useRef({});
+        const [edges, setEdges] = useState([]);
+        const modalContentRef = useRef(null);
+
+        const { nodes, tasksById } = useMemo(() => {
+            const projectTasks = allTasks.filter(t => (t.project || 'Unassigned') === projectName);
+            const projectTaskIds = new Set(projectTasks.map(t => t.id));
+            const relevantTaskIds = new Set(projectTaskIds);
+
+            // Find all upstream and downstream tasks
+            projectTasks.forEach(task => {
+                (task.dependsOn || []).forEach(depId => relevantTaskIds.add(depId));
+            });
+            allTasks.forEach(task => {
+                (task.dependsOn || []).forEach(depId => {
+                    if (projectTaskIds.has(depId)) {
+                        relevantTaskIds.add(task.id);
+                    }
+                });
+            });
+
+            const nodes = allTasks.filter(t => relevantTaskIds.has(t.id));
+            const tasksById = new Map(nodes.map(t => [t.id, t]));
+            return { nodes, tasksById };
+        }, [projectName, allTasks]);
+
+        useLayoutEffect(() => {
+            const newEdges = [];
+            const modalRect = modalContentRef.current.getBoundingClientRect();
+
+            nodes.forEach(task => {
+                (task.dependsOn || []).forEach(depId => {
+                    if (tasksById.has(depId)) {
+                        const fromNode = nodeRefs.current[depId];
+                        const toNode = nodeRefs.current[task.id];
+                        if (fromNode && toNode) {
+                            const fromRect = fromNode.getBoundingClientRect();
+                            const toRect = toNode.getBoundingClientRect();
+
+                            newEdges.push({
+                                id: `${depId}-${task.id}`,
+                                x1: fromRect.right - modalRect.left,
+                                y1: fromRect.top + fromRect.height / 2 - modalRect.top,
+                                x2: toRect.left - modalRect.left,
+                                y2: toRect.top + toRect.height / 2 - modalRect.top,
+                            });
+                        }
+                    }
+                });
+            });
+            setEdges(newEdges);
+        }, [nodes, tasksById]);
+
+        return (
+            <Modal onClose={onClose}>
+                <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-6xl text-white flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
+                        <h3 className="text-xl font-bold">Dependency Graph: {projectName}</h3>
+                        <button onClick={onClose} title="Close Graph View" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Close</button>
+                    </div>
+                    <div ref={modalContentRef} className="p-8 overflow-auto relative">
+                        <svg className="absolute top-0 left-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+                            <defs>
+                                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                                </marker>
+                            </defs>
+                            {edges.map(edge => (
+                                <line key={edge.id} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} stroke="#64748b" strokeWidth="2" markerEnd="url(#arrowhead)" />
+                            ))}
+                        </svg>
+                        <div className="flex gap-8 items-start">
+                            {nodes.map(task => {
+                                const isExternal = (task.project || 'Unassigned') !== projectName;
+                                const isDone = task.status === TASK_STATUS.DONE;
+                                return (
+                                    <div
+                                        key={task.id}
+                                        ref={el => nodeRefs.current[task.id] = el}
+                                        className={`p-3 rounded-lg border-2 w-48 flex-shrink-0 ${
+                                            isDone ? 'bg-green-900/30 border-green-700 opacity-60' :
+                                            isExternal ? 'bg-slate-700/50 border-slate-600' :
+                                            'bg-sky-900/50 border-sky-700'
+                                        }`}
+                                    >
+                                        <p className={`font-bold text-sm ${isDone ? 'line-through text-slate-400' : 'text-slate-100'}`}>{task.title}</p>
+                                        {isExternal && <p className="text-xs text-slate-400 mt-1 italic">Project: {task.project || 'Unassigned'}</p>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+        );
+    };
     const Modal = ({ children, onClose }) => <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">{children}</div>;
     const ModalContent = ({ title, children, onClose, headerActions }) => (
         <div 
@@ -1683,6 +2334,18 @@ const handleProjectHeaderClick = (projectName) => {
         </div>
     );
     const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm permanent deletion" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
+    const CompleteConfirmationModal = ({ onConfirm, onCancel, taskTitle }) => (
+        <Modal onClose={onCancel}>
+            <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-white mb-2">Complete Task?</h3>
+                <p className="text-slate-300 mb-4">Are you sure you want to mark this task as completed? <br/><strong className="text-slate-100 font-semibold">"{taskTitle}"</strong></p>
+                <div className="flex justify-center space-x-4">
+                    <button onClick={onCancel} title="Cancel" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button>
+                    <button onClick={onConfirm} title="Confirm completion" className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500">Complete</button>
+                </div>
+            </div>
+        </Modal>
+    );
     const SettingsModal = ({ settings, onSettingsChange, onClose }) => { 
         const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] })); 
         const handleAnimationSettingChange = (key, value) => onSettingsChange(p => ({ ...p, animationSettings: { ...p.animationSettings, [key]: value } }));
@@ -1759,7 +2422,7 @@ const handleProjectHeaderClick = (projectName) => {
 
     const SummaryModal = ({ summary, onClose }) => {
         const [copyButtonText, setCopyButtonText] = useState('Copy to Clipboard');
-
+        const [downloadButtonText, setDownloadButtonText] = useState('Download .txt');
         const handleCopy = useCallback(() => {
             if (!navigator.clipboard) {
                 console.error('Clipboard API not available.');
@@ -1783,10 +2446,10 @@ const handleProjectHeaderClick = (projectName) => {
             <Modal onClose={onClose}>
                 <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl text-white flex flex-col overflow-x-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
-                        <h3 className="text-xl font-bold">Completed Tasks Summary</h3>
+                        <h3 className="text-xl font-bold">Task Summary</h3>
                         <div className="flex items-center space-x-2">
                             <button onClick={handleCopy} title="Copy summary to your clipboard" className="px-3 py-1 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm transition-all duration-150 w-36 text-center">{copyButtonText}</button>
-                            <button onClick={onClose} title="Close this summary" className="px-4 py-1 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Done</button>
+                            <button onClick={onClose} title="Close this summary" className="px-4 py-1 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 text-sm">Close</button>
                         </div>
                     </div>
                     <div className="p-4 overflow-y-auto"><pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-4 rounded-md border border-slate-700">{summary}</pre></div>
@@ -2135,5 +2798,3 @@ const handleProjectHeaderClick = (projectName) => {
     </script>
 </body>
 </html>
-
- 
