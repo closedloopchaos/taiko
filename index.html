@@ -780,9 +780,9 @@
                 {item.completed && item.completedAt && (
                     <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
                         ({new Date(item.completedAt).toLocaleString('en-US', {
-                            timeZone: clockTimezone,
-                            month: 'numeric', day: 'numeric', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit'
+                            timeZone: clockTimezone, month: 'numeric', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                            timeZoneName: 'short'
                         })})
                     </span>
                 )}
