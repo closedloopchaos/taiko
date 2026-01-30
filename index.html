@@ -3271,16 +3271,34 @@
 
         const ShortLinkModal = ({ url, onClose }) => {
             const [copyButtonText, setCopyButtonText] = useState('Copy Link');
+            const [displayUrl, setDisplayUrl] = useState(url);
+            const [isShortening, setIsShortening] = useState(false);
+
+            useEffect(() => {
+                // If the URL is very long, try to shorten it for the QR code
+                if (url.length > 200) {
+                    setIsShortening(true);
+                    fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`)
+                        .then(res => res.text())
+                        .then(short => {
+                            if (short && short.startsWith('http')) {
+                                setDisplayUrl(short);
+                            }
+                        })
+                        .catch(err => console.warn('TinyURL failed, using long URL:', err))
+                        .finally(() => setIsShortening(false));
+                }
+            }, [url]);
 
             const handleCopy = () => {
-                navigator.clipboard.writeText(url).then(() => {
+                navigator.clipboard.writeText(displayUrl).then(() => {
                     setCopyButtonText('Copied!');
                     playTone(880, 0.1, 'sine', 0.2); // Success sound
                     setTimeout(() => setCopyButtonText('Copy Link'), 2000);
                 });
             };
 
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=000000&margin=10`;
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(displayUrl)}&bgcolor=ffffff&color=000000&margin=10`;
 
             return (
                 <Modal onClose={onClose}>
@@ -3292,20 +3310,20 @@
                                 <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
                             </div>
                         </div>
-                        <div className="p-6 flex flex-col gap-6">
-                            <p className="text-slate-400 text-sm">Scan with your phone to import tasks, or copy the link below.</p>
+                        <div className="p-8 flex flex-col items-center gap-8">
+                            <div className="text-center space-y-2">
+                                <p className="text-slate-400 text-sm">Scan with your phone to import tasks, or use the link below.</p>
+                                {isShortening && <p className="text-sky-400 text-xs animate-pulse font-bold tracking-widest uppercase">Shortening Tactical Link...</p>}
+                            </div>
 
-                            <div className="flex flex-col sm:flex-row gap-6 items-center">
-                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700/50 shadow-lg flex-shrink-0">
-                                    <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 rounded-lg" />
-                                </div>
-                                <div className="flex-grow w-full">
-                                    <div className="bg-slate-950/80 p-3 rounded-md border border-slate-700/50 font-mono text-xs text-sky-300 break-all max-h-32 overflow-y-auto">
-                                        {url}
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-2 text-center sm:text-left">
-                                        Link contains all active tasks and settings.
-                                    </p>
+                            <div className="bg-white p-4 rounded-2xl shadow-2xl ring-8 ring-sky-500/10">
+                                <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 md:w-64 md:h-64" />
+                            </div>
+
+                            <div className="w-full">
+                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 block px-1 text-center">Tactical Share URL</label>
+                                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 font-mono text-xs break-all text-sky-200/60 max-h-24 overflow-y-auto text-center">
+                                    {displayUrl}
                                 </div>
                             </div>
                         </div>
