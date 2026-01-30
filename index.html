@@ -15,10 +15,20 @@
 
     <!-- Custom CSS for animations and theming -->
     <style>
+        html,
+        body {
+            height: 100%;
+            height: 100dvh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+
         body {
             font-family: sans-serif;
-            background-color: #0f172a;
-            /* Fallback background */
+            position: fixed;
+            width: 100%;
         }
 
         .transition-all {
@@ -140,9 +150,11 @@
             }
         }
 
-        /* Prevent scroll chaining on mobile */
-        .no-scroll-chain {
-            overscroll-behavior: contain;
+        /* Prevent scroll chaining and double-scroll on mobile */
+        .scroll-container {
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
         }
 
         /* Body lock for modals */
@@ -2657,7 +2669,7 @@
             }, [tasks, selectedProjectName]);
 
             return (
-                <div className="h-screen w-screen font-sans flex flex-col overflow-x-hidden" style={{ background: 'transparent' }}>
+                <div className="h-full h-[100dvh] w-screen font-sans flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
 
                     {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                     {taskToComplete && <CompleteConfirmationModal onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} taskTitle={taskToComplete.title} />}
@@ -2739,7 +2751,7 @@
                     </div>
                     <main className={`flex-grow p-4 flex flex-col md:flex-row gap-4 overflow-hidden transition-all duration-300`}>
                         {/* Left Pane: Task List */}
-                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 no-scroll-chain ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                             <TaskList
                                 tasks={tasksMatchingActiveFilters}
                                 selectedTaskId={selectedTaskId}
@@ -2759,10 +2771,11 @@
                                 }}
                                 completedTasksCount={completedTasksCount} // This is correct
                             />
+                            <div className="h-32 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
 
                         {/* Right Pane: Task Details */}
-                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto no-scroll-chain ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
                             {selectedProjectName ? (
                                 <div className="space-y-4">
                                     {tasksForProjectView.length > 0 ? (
@@ -2790,6 +2803,7 @@
                                     Select a task or a project to see details
                                 </div>
                             )}
+                            <div className="h-32 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
                     </main>
                     <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
@@ -2825,7 +2839,7 @@
                         completedTasksCount={completedTasksCount}
                         onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)}
                     />
-                </div>
+                </div >
             );
         };
         // --- Column & Modal Components ---
@@ -3399,10 +3413,15 @@
                         if (title.length > 25) title = title.substring(0, 22) + '...';
 
                         // Standardize label structure for consistent sizing
-                        let projectPrefix = (task.project || 'UNASSIGNED').replace(/["#]/g, '');
-                        if (projectPrefix.length > 15) projectPrefix = projectPrefix.substring(0, 12) + '...';
+                        let projectPrefix = (task.project || 'NO PROJECT').replace(/["#]/g, '');
+                        if (projectPrefix.length > 20) projectPrefix = projectPrefix.substring(0, 17).toUpperCase() + '...';
+                        else projectPrefix = projectPrefix.toUpperCase();
 
-                        const label = `<div class="taiko-node"><div class="node-title">${title}</div><div class="node-proj">${projectPrefix}</div></div>`;
+                        // Using reliable block-based layout for height calculation
+                        const label = `<div style="width:140px; padding:10px; color:#fff; text-align:center; line-height:1.2;">` +
+                            `<div style="font-weight:bold; font-size:12px; margin-bottom:4px; white-space:normal; word-wrap:break-word;">${title}</div>` +
+                            `<div style="font-size:9px; opacity:0.6; letter-spacing:1px; white-space:normal; word-wrap:break-word;">${projectPrefix}</div>` +
+                            `</div>`;
 
                         graphDefinition += `${safeId}["${label}"]:::${className}\n`;
                         nodes.add(task.id);
