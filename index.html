@@ -2663,7 +2663,7 @@
             }, [tasks, selectedProjectName]);
 
             return (
-                <div className="h-full h-[100dvh] w-screen font-sans flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
+                <div className="h-[100dvh] w-screen font-sans flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
 
                     {taskToDelete && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                     {taskToComplete && <CompleteConfirmationModal onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} taskTitle={taskToComplete.title} />}
@@ -2765,7 +2765,7 @@
                                 }}
                                 completedTasksCount={completedTasksCount} // This is correct
                             />
-                            <div className="h-40 md:hidden" /> {/* Mobile bottom spacer */}
+                            <div className="h-24 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
 
                         {/* Right Pane: Task Details */}
@@ -2797,7 +2797,7 @@
                                     Select a task or a project to see details
                                 </div>
                             )}
-                            <div className="h-40 md:hidden" /> {/* Mobile bottom spacer */}
+                            <div className="h-24 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
                     </main>
                     <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
@@ -3437,8 +3437,12 @@
                             graphRef.current.innerHTML = result.svg;
                             const svg = graphRef.current.querySelector('svg');
                             if (svg) {
+                                // Scale to fit container while maintaining aspect ratio
+                                svg.style.width = '100%';
+                                svg.style.height = '100%';
                                 svg.style.maxWidth = '100%';
-                                svg.style.height = 'auto';
+                                svg.style.maxHeight = '100%';
+                                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                             }
                         }
                     }).catch(e => console.error(e));
@@ -3447,20 +3451,20 @@
 
             return (
                 <Modal onClose={onClose}>
-                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl h-full md:max-h-[85vh] text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl max-h-[90dvh] h-[90dvh] text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                         <style>{`
                             .taiko-node { padding: 4px; text-align: center; min-width: 100px; }
                             .node-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
                             .node-proj { opacity: 0.5; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
                         `}</style>
-                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
+                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50 flex-shrink-0">
                             <h3 className="text-xl font-bold text-sky-100 italic tracking-tight">Kodō</h3>
                             <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
                         </div>
-                        <div className="flex-grow overflow-auto p-4 flex items-start justify-center bg-slate-900/40" ref={graphRef}>
+                        <div className="flex-grow overflow-hidden p-4 flex items-center justify-center bg-slate-900/40" ref={graphRef}>
                             <div className="text-slate-500 animate-pulse">Generating Map...</div>
                         </div>
-                        <div className="p-3 text-[10px] uppercase font-bold tracking-widest text-slate-500 text-center border-t border-slate-700/50 bg-slate-800/30">
+                        <div className="p-3 text-[10px] uppercase font-bold tracking-widest text-slate-500 text-center border-t border-slate-700/50 bg-slate-800/30 flex-shrink-0">
                             <span className="text-emerald-500">Green: Done</span> | <span className="text-sky-400">Blue: Unlocked</span> | <span className="text-amber-500">Amber: Blocked</span> | <span className="text-slate-400">Gray: Idle</span>
                         </div>
                     </div>
