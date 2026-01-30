@@ -152,7 +152,8 @@
 
         /* Prevent scroll chaining and double-scroll on mobile */
         .scroll-container {
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: auto;
+            /* Allow natural bounce to reach bottom content */
             -webkit-overflow-scrolling: touch;
             touch-action: pan-y;
         }
@@ -2277,7 +2278,7 @@
                         </div>
 
                         <div className="p-4 bg-slate-950/30 border-t border-slate-800 space-y-3">
-                            <div className="px-2 pb-1 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Battle Strategy</div>
+                            <div className="px-2 pb-1 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Tools</div>
                             <button onClick={() => { filterProps.onShowGraph(); onClose(); }} className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 bg-slate-800/40 hover:bg-slate-800 rounded-xl transition-colors group border border-slate-700/30">
                                 <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg group-hover:scale-110 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1-1H5a1 1 0 01-1-1V4z" /></svg></div>
                                 <span className="text-sm font-semibold tracking-wide">Kodō</span>
@@ -2771,7 +2772,7 @@
                                 }}
                                 completedTasksCount={completedTasksCount} // This is correct
                             />
-                            <div className="h-32 md:hidden" /> {/* Mobile bottom spacer */}
+                            <div className="h-40 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
 
                         {/* Right Pane: Task Details */}
@@ -2803,7 +2804,7 @@
                                     Select a task or a project to see details
                                 </div>
                             )}
-                            <div className="h-32 md:hidden" /> {/* Mobile bottom spacer */}
+                            <div className="h-40 md:hidden" /> {/* Mobile bottom spacer */}
                         </div>
                     </main>
                     <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
@@ -3347,7 +3348,7 @@
                         <div className="p-8 flex flex-col items-center gap-8">
                             <div className="text-center space-y-2">
                                 <p className="text-slate-400 text-sm">Scan with your phone to import tasks, or use the link below.</p>
-                                {isShortening && <p className="text-sky-400 text-xs animate-pulse font-bold tracking-widest uppercase">Shortening Tactical Link...</p>}
+                                {isShortening && <p className="text-sky-400 text-xs animate-pulse font-bold tracking-widest uppercase">Shortening Link...</p>}
                             </div>
 
                             <div className="bg-white p-4 rounded-2xl shadow-2xl ring-8 ring-sky-500/10">
@@ -3355,7 +3356,7 @@
                             </div>
 
                             <div className="w-full">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 block px-1 text-center">Tactical Share URL</label>
+                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 block px-1 text-center">Share URL</label>
                                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 font-mono text-xs break-all text-sky-200/60 max-h-24 overflow-y-auto text-center">
                                     {displayUrl}
                                 </div>
@@ -3408,20 +3409,16 @@
                             else if (task.dependsOn?.length > 0) className = 'ready';
                         }
 
-                        // Clean and truncate title
+                        // Clean and truncate title for readability
                         let title = task.title.replace(/["#]/g, '');
-                        if (title.length > 25) title = title.substring(0, 22) + '...';
+                        if (title.length > 20) title = title.substring(0, 17) + '...';
 
-                        // Standardize label structure for consistent sizing
-                        let projectPrefix = (task.project || 'NO PROJECT').replace(/["#]/g, '');
-                        if (projectPrefix.length > 20) projectPrefix = projectPrefix.substring(0, 17).toUpperCase() + '...';
-                        else projectPrefix = projectPrefix.toUpperCase();
+                        // Simple text-based label with project on second line
+                        let projectPrefix = task.project ? task.project.replace(/["#]/g, '') : 'Unassigned';
+                        if (projectPrefix.length > 18) projectPrefix = projectPrefix.substring(0, 15) + '...';
 
-                        // Using reliable block-based layout for height calculation
-                        const label = `<div style="width:140px; padding:10px; color:#fff; text-align:center; line-height:1.2;">` +
-                            `<div style="font-weight:bold; font-size:12px; margin-bottom:4px; white-space:normal; word-wrap:break-word;">${title}</div>` +
-                            `<div style="font-size:9px; opacity:0.6; letter-spacing:1px; white-space:normal; word-wrap:break-word;">${projectPrefix}</div>` +
-                            `</div>`;
+                        // Use plain text with escaped newline - Mermaid handles this natively
+                        const label = `${title}\\n${projectPrefix}`;
 
                         graphDefinition += `${safeId}["${label}"]:::${className}\n`;
                         nodes.add(task.id);
