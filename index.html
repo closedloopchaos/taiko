@@ -3338,15 +3338,27 @@
 
             useEffect(() => {
                 if (graphRef.current) {
-                    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose', flowchart: { useMaxWidth: false, htmlLabels: true } });
+                    // Improved initialization for better responsiveness
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'dark',
+                        securityLevel: 'loose',
+                        flowchart: {
+                            useMaxWidth: true, // Allow scaling to fit container width
+                            htmlLabels: true,
+                            curve: 'basis', // Smoother lines
+                            nodeSpacing: 50,
+                            rankSpacing: 50
+                        }
+                    });
 
                     const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE || (tasks.some(child => child.dependsOn?.includes(t.id) && child.status !== TASK_STATUS.DONE)));
 
                     let graphDefinition = 'graph TD\n';
-                    graphDefinition += 'classDef default fill:#1e293b,stroke:#475569,stroke-width:2px,color:#fff;\n';
-                    graphDefinition += 'classDef done fill:#064e3b,stroke:#059669,color:#fff;\n';
-                    graphDefinition += 'classDef blocked fill:#451a03,stroke:#d97706,color:#fff,stroke-dasharray: 5 5;\n';
-                    graphDefinition += 'classDef ready fill:#0c4a6e,stroke:#0ea5e9,color:#fff;\n';
+                    graphDefinition += 'classDef default fill:#1e293b,stroke:#475569,stroke-width:2px,color:#fff,rx:8,ry:8;\n';
+                    graphDefinition += 'classDef done fill:#064e3b,stroke:#059669,color:#fff,rx:8,ry:8;\n';
+                    graphDefinition += 'classDef blocked fill:#451a03,stroke:#d97706,color:#fff,stroke-dasharray: 5 5,rx:8,ry:8;\n';
+                    graphDefinition += 'classDef ready fill:#0c4a6e,stroke:#0ea5e9,color:#fff,rx:8,ry:8;\n';
 
                     const nodes = new Set();
                     const edges = [];
@@ -3371,7 +3383,8 @@
                         if (task.project) {
                             let projectPrefix = task.project.replace(/["#]/g, '');
                             if (projectPrefix.length > 15) projectPrefix = projectPrefix.substring(0, 12) + '...';
-                            label = `<div style="display:flex;flex-direction:column;gap:4px;"><span>${title}</span><small style="opacity:0.6;font-size:0.7em;font-weight:normal;letter-spacing:0.05em;text-transform:uppercase;">${projectPrefix}</small></div>`;
+                            // Using a more compact HTML structure for node boundaries
+                            label = `<div class="taiko-node"><div class="node-title">${title}</div><div class="node-proj">${projectPrefix}</div></div>`;
                         }
 
                         graphDefinition += `${safeId}["${label}"]:::${className}\n`;
@@ -3396,6 +3409,11 @@
                     mermaid.render('mermaid-graph', graphDefinition).then((result) => {
                         if (graphRef.current) {
                             graphRef.current.innerHTML = result.svg;
+                            const svg = graphRef.current.querySelector('svg');
+                            if (svg) {
+                                svg.style.maxWidth = '100%';
+                                svg.style.height = 'auto';
+                            }
                         }
                     }).catch(e => console.error(e));
                 }
@@ -3404,11 +3422,16 @@
             return (
                 <Modal onClose={onClose}>
                     <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl h-full md:max-h-[85vh] text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <style>{`
+                            .taiko-node { padding: 4px; text-align: center; min-width: 100px; }
+                            .node-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
+                            .node-proj { opacity: 0.5; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+                        `}</style>
                         <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
                             <h3 className="text-xl font-bold text-sky-100 italic tracking-tight">Kodō</h3>
                             <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
                         </div>
-                        <div className="flex-grow overflow-auto p-4 flex items-start justify-center bg-slate-900/30" ref={graphRef}>
+                        <div className="flex-grow overflow-auto p-4 flex items-start justify-center bg-slate-900/40" ref={graphRef}>
                             <div className="text-slate-500 animate-pulse">Generating Map...</div>
                         </div>
                         <div className="p-3 text-[10px] uppercase font-bold tracking-widest text-slate-500 text-center border-t border-slate-700/50 bg-slate-800/30">
