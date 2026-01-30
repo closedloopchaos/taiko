@@ -127,6 +127,18 @@
             z-index: -1;
             /* Places the canvas behind all other content */
         }
+
+        @media (max-width: 768px) {
+            .mobile-scroll-padding {
+                padding-bottom: 8rem !important;
+                /* Enough to clear the 5rem nav bar + extra space */
+            }
+
+            .mobile-header-blur {
+                backdrop-filter: blur(12px);
+                background-color: rgba(15, 23, 42, 0.8);
+            }
+        }
     </style>
 </head>
 
@@ -1097,6 +1109,7 @@
         const TaskCard = ({ task, clockTimezone, startInEditMode, onEditModeEnd, isDetailedView, onSelect }) => {
             const { tasks, updateTask, deleteTask, allTags, settings, setTaskToDelete, activeTags } = useAppContext();
             const now = useNow();
+            const windowWidth = useWindowWidth();
             const isLocked = task.status === TASK_STATUS.DONE;
             const [isEditingTitle, setIsEditingTitle] = useState(false); // To be wrapped
             const [title, setTitle] = useState(task.title);
@@ -1407,59 +1420,79 @@
                 !isDetailedView ? ( // This is the Project View Card
                     // --- Project View Card (3-Column Layout) ---
                     <div onClick={() => onSelect(task.id)} className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-md transition-all duration-300 cursor-pointer hover:border-sky-500 hover:shadow-lg ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/50' : ''}`}>
-                        <div className="px-4 pt-3 pb-2 border-b border-slate-700/50">
-                            <div className="flex items-center gap-2">
-                                {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
-                                {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
-                                <h3 className={`font-semibold text-slate-100 break-words text-base ${isLocked ? 'line-through text-slate-500' : ''}`}>{task.title}</h3>
+                        <div className="px-4 py-3 border-b border-slate-700/30 bg-slate-900/40">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    {isUnlocked && <div className="p-1.5 bg-green-500/20 text-green-400 rounded-lg flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg></div>}
+                                    {isBlocked && <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg></div>}
+                                    <h3 className={`font-bold text-slate-100 break-words text-base leading-tight ${isLocked ? 'line-through text-slate-500' : ''}`}>{task.title}</h3>
+                                </div>
+                                <div className="flex-shrink-0 text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-5 divide-x divide-slate-700 text-center">
+                        <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-5 text-center sm:text-left divide-y sm:divide-y-0 lg:divide-x divide-slate-700/30">
                             {/* Column 1: Priority */}
-                            <div className="p-3">
-                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Priority</div>
-                                <div className={`text-sm font-bold rounded-md py-1 ${PRIORITY_CONFIG[task.priority]?.color || 'text-slate-300'}`}>
-                                    {PRIORITY_CONFIG[task.priority]?.title || 'N/A'}
+                            <div className="p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start lg:items-center lg:justify-center border-slate-700/30">
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] sm:mb-1.5">Priority</div>
+                                <div className={`text-xs font-bold ${PRIORITY_CONFIG[task.priority]?.color || 'text-slate-300'}`}>
+                                    {PRIORITY_CONFIG[task.priority]?.title || 'Unprioritized'}
                                 </div>
                             </div>
-                            {/* Blocked By Column */}
-                            <div className="p-3">
-                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Blocked By</div>
-                                <div className="text-xs text-slate-300 py-1 break-words">
+
+                            {/* Column 2: Size */}
+                            <div className="p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start lg:items-center lg:justify-center border-slate-700/30">
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] sm:mb-1.5">Size</div>
+                                <div className="text-xs font-bold text-slate-300">
+                                    {task.size ? TASK_SIZES[task.size] : '—'}
+                                </div>
+                            </div>
+
+                            {/* Column 3: Blocked By */}
+                            <div className="p-3 flex flex-col sm:items-start lg:items-center border-slate-700/30">
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] mb-1.5 flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                    Blocked By
+                                </div>
+                                <div className="text-[11px] text-slate-300 font-medium w-full">
                                     {upstreamTasks.length > 0 ? (
-                                        upstreamTasks.map((t, index) => (
-                                            <React.Fragment key={t.id}>
+                                        <div className="flex flex-wrap gap-1.5 sm:justify-start lg:justify-center">
+                                            {upstreamTasks.map((t, index) => (
                                                 <button
+                                                    key={t.id}
                                                     onClick={(e) => { e.stopPropagation(); onSelect(t.id); }}
-                                                    className="transition-all hover:text-sky-300 hover:[text-shadow:0_0_8px_theme(colors.sky.400)]"
-                                                    title={`Go to task: ${t.title}`}
-                                                >{t.title}</button>
-                                                {index < upstreamTasks.length - 1 ? ', ' : ''}
-                                            </React.Fragment>
-                                        ))
-                                    ) : <span className="italic text-slate-500">None</span>
-                                    }
+                                                    className="text-sky-400 hover:text-sky-300 underline decoration-sky-500/30 underline-offset-2 transition-colors"
+                                                >
+                                                    {t.title}{index < upstreamTasks.length - 1 ? ',' : ''}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : <span className="text-slate-600 font-normal italic">None</span>}
                                 </div>
                             </div>
-                            {/* Column 2: Time Tracking */}
-                            <div className="p-3">
-                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time Spent</div>
-                                <TimeElapsed startTime={task.timingSessionStartTime} totalElapsedSeconds={task.timeSpentSeconds} />
-                            </div>
-                            {/* Column 3: Task Size */}
-                            <div className="p-3">
-                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Size</div>
-                                <div className="text-sm font-bold text-slate-300 py-1">
-                                    {task.size ? TASK_SIZES[task.size] : 'N/A'}
+
+                            {/* Column 4: Time Tracking */}
+                            <div className="p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start lg:items-center lg:justify-center border-slate-700/30">
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] sm:mb-1.5 flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Progress
+                                </div>
+                                <div className="text-xs font-mono font-bold text-slate-300">
+                                    <TimeElapsed startTime={task.timingSessionStartTime} totalElapsedSeconds={task.timeSpentSeconds} />
                                 </div>
                             </div>
-                            {/* Column 4: Due Date */}
-                            <div className="p-3">
-                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Due Date</div>
-                                <div className={`text-sm font-bold py-1 ${task.dueDate && new Date(task.dueDate) < new Date() ? 'text-red-400' : 'text-slate-300'}`}>
+
+                            {/* Column 5: Due Date */}
+                            <div className="p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start lg:items-center lg:justify-center border-slate-700/30">
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] sm:mb-1.5 flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                    Deadline
+                                </div>
+                                <div className={`text-xs font-bold ${task.dueDate && new Date(task.dueDate) < new Date() ? 'text-rose-400' : 'text-slate-300'}`}>
                                     {task.dueDate
-                                        ? new Date(task.dueDate).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
-                                        : 'N/A'
+                                        ? new Date(task.dueDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                                        : '—'
                                     }
                                 </div>
                             </div>
@@ -1471,7 +1504,7 @@
                         <div className={`w-full min-w-0 bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-lg transition-shadow duration-300 ${pulseClass} ${TASK_STATUS_CONFIG[task.status]?.glowClass || ''} ${isLocked ? 'opacity-60' : ''} ${isBlocked ? 'ring-2 ring-amber-500/80' : ''}`}>
                             {/* --- Header: Title & Priority --- */}
                             <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
-                                <div className="flex justify-between items-center mb-1">
+                                <div className={`flex flex-wrap justify-between items-center mb-1 ${windowWidth < 768 ? 'flex-col items-start gap-4' : ''}`}>
                                     {/* Task Title */}
                                     <div className="flex-grow min-w-0 mr-4">
                                         {isEditingTitle ? (
@@ -1490,22 +1523,23 @@
 
                                     {/* Right-side Header Actions: Priority & Completion */}
                                     {isDetailedView && (
-                                        <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                                        <div className={`flex items-center gap-4 flex-shrink-0 ${windowWidth < 768 ? 'w-full justify-between mt-4 pt-4 border-t border-slate-700/50' : 'ml-4'}`}>
                                             {/* Priority Dots */}
                                             <div className="flex items-center space-x-2">
                                                 <span className="text-xs text-slate-400">Priority:</span>
-                                                {DISPLAY_PRIORITY_ORDER.map(pConst => {
-                                                    const config = PRIORITY_CONFIG[pConst];
-                                                    const isSelected = task.priority === pConst;
-                                                    const isTogglingOff = isSelected;
-                                                    return (
-                                                        <button
-                                                            key={pConst} title={`Set priority: ${config.title}`}
-                                                            onClick={() => handleSetPriority(pConst)} disabled={isLocked}
-                                                            className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${isSelected ? `${config.bgColor} ${config.borderColor} ${config.color}` : `bg-slate-600/30 border-slate-600 text-slate-300 hover:${config.bgColor}`}`}
-                                                        >{config.title}</button>
-                                                    );
-                                                })}
+                                                <div className="flex flex-wrap gap-1">
+                                                    {DISPLAY_PRIORITY_ORDER.map(pConst => {
+                                                        const config = PRIORITY_CONFIG[pConst];
+                                                        const isSelected = task.priority === pConst;
+                                                        return (
+                                                            <button
+                                                                key={pConst} title={`Set priority: ${config.title}`}
+                                                                onClick={() => handleSetPriority(pConst)} disabled={isLocked}
+                                                                className={`px-3 py-1 text-[10px] font-bold uppercase tracking-tight rounded-md border transition-all ${isSelected ? `${config.bgColor} ${config.borderColor} ${config.color} scale-105 shadow-md shadow-${config.bgColor.split('-')[1]}-500/20` : `bg-slate-800/50 border-slate-700 text-slate-400 hover:${config.bgColor}`}`}
+                                                            >{config.title}</button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                             {/* Completion Button */}
                                             <div>
@@ -1513,7 +1547,7 @@
                                                     onClick={handleCompletionToggle}
                                                     title={isBlocked ? "Task is blocked by a dependency" : (isLocked ? "Mark as 'To Do'" : "Mark as 'Completed'")}
                                                     disabled={isBlocked && !isLocked}
-                                                    className={`p-2 rounded-full transition-all duration-200 transform hover:scale-110 ${isLocked ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'text-slate-400 hover:text-green-400 hover:bg-green-500/20'} disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:scale-100`}
+                                                    className={`p-3 rounded-full transition-all duration-200 transform hover:scale-110 ${isLocked ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-800 text-slate-400 hover:text-green-400 hover:bg-green-500/20 border border-slate-700'} disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:scale-100`}
                                                 >
                                                     <CheckIcon />
                                                 </button>
@@ -2057,6 +2091,175 @@
             );
         });
 
+        const MobileSidebar = React.memo(({ isOpen, onClose, clockTimezone, handleTimezoneChange, ...filterProps }) => {
+            if (!isOpen) return null;
+            return (
+                <div
+                    className="md:hidden fixed inset-0 z-[60] animate-in fade-in duration-300"
+                    onClick={onClose}
+                >
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                    <div
+                        className="absolute top-0 left-0 bottom-0 w-[85%] max-w-xs bg-slate-900 border-r border-slate-700 shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
+                            <div className="flex items-center px-1">
+                                {/* Only show clock in sidebar if it's hidden in the main header (<sm) */}
+                                <div className="sm:hidden scale-75 origin-left">
+                                    <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
+                                </div>
+                                {/* Show stylized 'MENU' if main header clock is visible (>=sm) */}
+                                <div className="hidden sm:block">
+                                    <span className="text-xl font-bold tracking-[0.2em] text-[#E0E7FF] uppercase select-none">Menu</span>
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-800 rounded-full transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-4 space-y-6">
+                            {/* Search */}
+                            <div className="space-y-2">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">Search</h3>
+                                <div className="relative">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                    <input
+                                        type="text"
+                                        value={filterProps.searchQuery}
+                                        onChange={(e) => filterProps.setSearchQuery(e.target.value)}
+                                        placeholder="Quick find..."
+                                        className="w-full bg-slate-800 border-none text-slate-200 text-sm pl-10 pr-3 py-3 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Priority Filters */}
+                            <div className="space-y-2">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">Priorities</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {filterProps.DISPLAY_PRIORITY_ORDER.map(pConst => {
+                                        const config = filterProps.PRIORITY_CONFIG[pConst];
+                                        const pTitle = config.title;
+                                        const isActive = filterProps.activeTags.includes(pTitle);
+                                        return (
+                                            <button
+                                                key={pTitle}
+                                                onClick={() => filterProps.onTagFilterClick(pTitle)}
+                                                className={`flex flex-col p-3 rounded-xl border transition-all ${isActive ? `${config.bgColor} ${config.borderColor} text-white` : 'bg-slate-800/50 border-slate-700/50 text-slate-400'}`}
+                                            >
+                                                <span className="text-xs font-bold truncate">{pTitle}</span>
+                                                <span className="text-[10px] opacity-70">{filterProps.priorityFilterCounts[pTitle] || 0} tasks</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Project Filters */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center px-2">
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Projects</h3>
+                                    <button onClick={() => { filterProps.onShowNewProjectModal(); onClose(); }} className="text-sky-400 p-1 hover:bg-sky-500/10 rounded-md">
+                                        <PlusIcon className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                <div className="space-y-1">
+                                    <button
+                                        onClick={() => { filterProps.onClearFilters(); }}
+                                        className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex justify-between items-center ${filterProps.activeTags.length === 0 ? 'bg-sky-500/20 text-sky-400 font-bold' : 'text-slate-300 hover:bg-slate-800'}`}
+                                    >
+                                        <span>All Active</span>
+                                        <span className="text-xs opacity-60">{filterProps.activeTasksCount}</span>
+                                    </button>
+                                    {filterProps.tagsForCurrentView.map(tag => {
+                                        const isActive = filterProps.activeTags.includes(tag);
+                                        return (
+                                            <button
+                                                key={tag}
+                                                onClick={() => filterProps.onTagFilterClick(tag)}
+                                                className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex justify-between items-center ${isActive ? 'bg-indigo-500/20 text-indigo-400 font-bold' : 'text-slate-300 hover:bg-slate-800'}`}
+                                            >
+                                                <span className="truncate">{tag}</span>
+                                                <span className="text-xs opacity-60">{filterProps.customTagFilterCounts[tag] || 0}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-950/30 border-t border-slate-800 space-y-3">
+                            <div className="px-2 pb-1 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Battle Strategy</div>
+                            <button onClick={() => { filterProps.onShowGraph(); onClose(); }} className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 bg-slate-800/40 hover:bg-slate-800 rounded-xl transition-colors group border border-slate-700/30">
+                                <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg group-hover:scale-110 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1-1H5a1 1 0 01-1-1V4z" /></svg></div>
+                                <span className="text-sm font-semibold tracking-wide">Kodō (Pulse Graph)</span>
+                            </button>
+
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <button onClick={() => { filterProps.onGenerateShortLink(); onClose(); }} className="flex flex-col items-center justify-center p-3 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/30 rounded-xl text-slate-300 transition-colors">
+                                    <ShareIcon className="h-5 w-5 mb-1 text-sky-400" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Share List</span>
+                                </button>
+                                <button onClick={() => { filterProps.onGenerateSummary(); onClose(); }} className="flex flex-col items-center justify-center p-3 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/30 rounded-xl text-slate-300 transition-colors">
+                                    <DocumentTextIcon className="h-5 w-5 mb-1 text-emerald-400" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Summary</span>
+                                </button>
+                            </div>
+
+
+
+                            <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" target="_blank" rel="noopener noreferrer" onClick={onClose} className="w-full flex items-center justify-center gap-2 py-3 text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors">
+                                <BugIcon className="h-4 w-4" /> Report issue
+                            </a>
+
+                            {filterProps.completedTasksCount > 0 && (
+                                <button onClick={() => { filterProps.onShowDeleteAllModal(); onClose(); }} className="w-full mt-2 py-3 text-red-400 bg-red-500/5 hover:bg-red-500/10 text-[10px] font-black uppercase tracking-[0.2em] border border-red-500/20 rounded-xl transition-all">
+                                    Purge Completed Forces
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const MobileBottomNav = React.memo(({ showDetailViewOnMobile, onBack, onAdd, onSettings, onOpenSidebar }) => {
+            return (
+                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 flex justify-around items-center h-24 px-4 z-50 animate-in slide-in-from-bottom duration-300">
+                    <button
+                        onClick={showDetailViewOnMobile ? onBack : onOpenSidebar}
+                        className={`flex flex-col items-center gap-1.5 transition-all ${!showDetailViewOnMobile ? 'text-sky-400 font-bold' : 'text-slate-400'}`}
+                    >
+                        <div className={`p-2 rounded-xl transition-all ${!showDetailViewOnMobile ? 'bg-sky-500/20 active:scale-95' : 'active:scale-90'}`}>
+                            {showDetailViewOnMobile ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            )}
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{showDetailViewOnMobile ? 'Back' : 'Menu'}</span>
+                    </button>
+
+                    <button onClick={onAdd} className="flex flex-col items-center group transition-all active:scale-95 -mt-2">
+                        <div className="bg-gradient-to-tr from-rose-600 to-rose-400 text-white p-4 rounded-full shadow-[0_0_25px_rgba(225,29,72,0.4)] border-2 border-white/30 relative overflow-hidden group-active:shadow-inner mb-2 ring-4 ring-rose-500/10">
+                            <PlusIcon className="h-8 w-8 relative z-10" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                        </div>
+                        <span className="text-[11px] font-black text-rose-500 uppercase tracking-[0.2em]">Add Task</span>
+                    </button>
+
+                    <button onClick={onSettings} className="flex flex-col items-center gap-1.5 text-slate-500 hover:text-slate-200 transition-colors">
+                        <div className="p-2 transition-all active:scale-90">
+                            <SettingsIcon className="h-6 w-6" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Options</span>
+                    </button>
+                </div>
+            );
+        });
+
         // --- Main Presentation Component ---
         const App = () => {
             const {
@@ -2083,6 +2286,7 @@
             const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
             const [selectedProjectName, setSelectedProjectName] = useState(null);
             const [taskToComplete, setTaskToComplete] = useState(null);
+            const [showMobileSidebar, setShowMobileSidebar] = useState(false);
             const windowWidth = useWindowWidth();
             // --- Effect for showing release notes once per version ---
 
@@ -2201,6 +2405,7 @@
                 if (projectName && projectName.trim()) {
                     const newTask = addTask('New Task', projectName.trim());
                     setSelectedTaskId(newTask.id);
+                    setSelectedProjectName(null); // Clear project view to show task details
                 }
                 setShowNewProjectModal(false);
             };
@@ -2210,6 +2415,7 @@
                 // This will now handle a single project
                 const newTask = addTask(title, null, priority);
                 setSelectedTaskId(newTask.id); // Select the newly created task
+                setSelectedProjectName(null);  // Clear project view to show task details
                 setShowAddTaskModal(false);
             };
 
@@ -2415,40 +2621,44 @@
                         />
                     )}
 
-                    <header className="sticky top-0 z-20 px-4 py-2 bg-black backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-white/10 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+                    <header className="sticky top-0 z-20 px-4 flex items-center justify-between bg-black/90 backdrop-blur-xl shadow-2xl shadow-black/40 border-b border-white/10 h-16 md:h-20 flex-shrink-0 transition-all">
                         {/* --- Left Side: Logo, Title, Toolbar --- */}
-                        <div className="flex items-center gap-4">
-                            {showDetailViewOnMobile ? (
-                                <button
-                                    onClick={() => { setSelectedTaskId(null); setSelectedProjectName(null); }}
-                                    className="text-sky-300 hover:bg-sky-500/20 p-2 rounded-md flex items-center gap-2"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                                    <span className="font-semibold">Back</span>
-                                </button>
-                            ) : (
-                                <>
-                                    <TaikoLogo />
-                                    <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
-                                </>
-                            )}
-                            <HeaderToolbar
-                                isSmallScreen={windowWidth < 768}
-                                onShowSettings={() => setShowSettings(true)}
-                                onGenerateSummary={generateCompletedTasksSummary}
-                                onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)}
-                                showDeleteAllButton={completedTasksCount > 0}
-                                onGenerateShortLink={handleGenerateShortLink}
-                                onShowGraph={() => setShowGraphModal(true)}
-                            />
+                        <div className="flex items-center gap-4 h-full">
+                            <div
+                                className={`flex items-center gap-3 h-full min-w-0 ${(selectedTaskId || selectedProjectName) ? 'cursor-pointer hover:opacity-80 transition-all active:scale-95' : ''}`}
+                                onClick={() => {
+                                    if (selectedTaskId || selectedProjectName) {
+                                        setSelectedTaskId(null);
+                                        setSelectedProjectName(null);
+                                    }
+                                }}
+                            >
+                                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center">
+                                    <div className="scale-75 md:scale-100 transition-transform origin-center flex items-center justify-center">
+                                        <TaikoLogo />
+                                    </div>
+                                </div>
+                                <h1 className="text-xl md:text-3xl font-bold tracking-[0.2em] text-[#E0E7FF] uppercase select-none transition-all truncate py-2 flex items-center">Taiko</h1>
+                            </div>
+                            <div className="hidden md:flex items-center gap-2">
+                                <HeaderToolbar
+                                    isSmallScreen={isSmallScreen}
+                                    onShowSettings={() => setShowSettings(true)}
+                                    onGenerateSummary={generateCompletedTasksSummary}
+                                    onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)}
+                                    showDeleteAllButton={completedTasksCount > 0}
+                                    onGenerateShortLink={handleGenerateShortLink}
+                                    onShowGraph={() => setShowGraphModal(true)}
+                                />
+                            </div>
                         </div>
 
-                        {/* --- Right Side: Add Task & Clock --- */}
-                        <div className={`flex items-center ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                        {/* --- Right Side: Clock --- */}
+                        <div className="hidden sm:flex items-center ml-auto">
                             <LiveClock timezone={clockTimezone} onTimezoneChange={handleTimezoneChange} />
                         </div>
                     </header>
-                    <div className={`px-4 py-2 flex-shrink-0 border-b border-slate-800 flex justify-between items-center flex-wrap gap-4 ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                    <div className={`hidden md:flex px-4 py-2 flex-shrink-0 border-b border-slate-800 justify-between items-center flex-wrap gap-4 ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                         <FilterToolbar
                             activeTasksCount={activeTasksCount}
                             completedTasksCount={completedTasksCount}
@@ -2465,7 +2675,7 @@
                     </div>
                     <main className={`flex-grow p-4 flex flex-col md:flex-row gap-4 overflow-hidden transition-all duration-300`}>
                         {/* Left Pane: Task List */}
-                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                             <TaskList
                                 tasks={tasksMatchingActiveFilters}
                                 selectedTaskId={selectedTaskId}
@@ -2488,7 +2698,7 @@
                         </div>
 
                         {/* Right Pane: Task Details */}
-                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${showListViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
                             {selectedProjectName ? (
                                 <div className="space-y-4">
                                     {tasksForProjectView.length > 0 ? (
@@ -2519,6 +2729,38 @@
                         </div>
                     </main>
                     <Footer onShowReleaseNotes={() => setShowReleaseNotesModal(true)} />
+                    <MobileBottomNav
+                        showDetailViewOnMobile={showDetailViewOnMobile}
+                        onBack={() => { setSelectedTaskId(null); setSelectedProjectName(null); }}
+                        onAdd={() => setShowAddTaskModal(true)}
+                        onSettings={() => setShowSettings(true)}
+                        onShowGraph={() => setShowGraphModal(true)}
+                        onOpenSidebar={() => setShowMobileSidebar(true)}
+                    />
+                    <MobileSidebar
+                        isOpen={showMobileSidebar}
+                        onClose={() => setShowMobileSidebar(false)}
+                        clockTimezone={clockTimezone}
+                        handleTimezoneChange={handleTimezoneChange}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        activeTags={activeTags}
+                        onTagFilterClick={handleTagFilterClick}
+                        onClearFilters={clearTagFilter}
+                        tagsForCurrentView={allTags}
+                        customTagFilterCounts={customTagFilterCounts}
+                        activeTasksCount={activeTasksCount}
+                        priorityFilterCounts={priorityFilterCounts}
+                        PRIORITY_CONFIG={PRIORITY_CONFIG}
+                        DISPLAY_PRIORITY_ORDER={DISPLAY_PRIORITY_ORDER}
+                        onShowNewProjectModal={() => setShowNewProjectModal(true)}
+                        onShowGraph={() => setShowGraphModal(true)}
+                        onShowSettings={() => setShowSettings(true)}
+                        onGenerateSummary={generateCompletedTasksSummary}
+                        onGenerateShortLink={handleGenerateShortLink}
+                        completedTasksCount={completedTasksCount}
+                        onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)}
+                    />
                 </div>
             );
         };
@@ -2552,7 +2794,7 @@
             const filterButtonText = activeTags.length > 0 ? `Filtered: ${activeTags.join(', ')}` : 'Filter by...';
 
             return (
-                <div className="flex items-center space-x-2 flex-wrap gap-y-2 w-full">
+                <div className="hidden md:flex items-center space-x-2 flex-wrap gap-y-2 w-full">
                     {/* --- Search Bar --- */}
                     <div className="relative flex-grow max-w-sm">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
@@ -2625,6 +2867,7 @@
 
             const menuItems = (
                 <>
+                    <button onClick={() => { onShowGraph(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-indigo-300 hover:bg-slate-700 font-semibold">Kodō (Pulse)</button>
                     <button onClick={onShowSettings} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Settings</button>
                     <button onClick={onGenerateShortLink} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Copy Mobile Shortlink</button>
                     <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Report Issue</a>
@@ -2633,20 +2876,7 @@
                 </>
             );
 
-            if (isSmallScreen) {
-                return (
-                    <div className="relative" ref={menuRef}>
-                        <button onClick={() => setIsMenuOpen(prev => !prev)} title="More options" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
-                        </button>
-                        {isMenuOpen && (
-                            <div className="absolute left-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-md shadow-lg py-1 z-20">
-                                {menuItems}
-                            </div>
-                        )}
-                    </div>
-                );
-            }
+            if (isSmallScreen) return null;
 
             return (
                 <div className="flex items-center flex-wrap gap-2">
@@ -2673,7 +2903,7 @@
                 </svg>
             );
             return (
-                <footer className="relative bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40 flex-shrink-0 overflow-hidden">
+                <footer className="hidden md:block relative bg-slate-900/80 backdrop-blur-sm p-3 text-center text-sm text-slate-400 shadow-t-lg z-40 flex-shrink-0 overflow-hidden">
                     <EarthIcon />
                     <div className="flex items-center justify-center space-x-4">
                         <div className="flex items-center justify-center space-x-1.5">
@@ -2894,72 +3124,56 @@
             </Modal>
         );
         const SettingsModal = ({ settings, onSettingsChange, onClose }) => {
-            const { exportData, generateShortLink, initiateImport } = useAppContext();
+            const { exportData, initiateImport } = useAppContext();
             const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] }));
 
             return (
                 <Modal onClose={onClose}>
-                    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="min-h-full w-full flex flex-col items-center justify-start py-12 px-4 sm:px-6">
-                            <div className="w-full max-w-2xl bg-slate-900 text-white flex flex-col">
-                                <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-700/50">
-                                    <h2 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400">Settings</h2>
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="relative">
-                                    <div className="space-y-8 p-4">
-                                        <div className="flex items-center justify-between">
-                                            <label className="text-xl text-slate-200 font-semibold">Confirm on Delete</label>
-                                            <button onClick={() => handleToggle('confirmOnDelete')} title={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                                        </div>
-                                        <div className="pt-4 border-t border-slate-700/50 space-y-4">
-                                            <h4 className="text-xl font-bold text-slate-200">Data & Portability</h4>
-                                            <p className="text-xs text-slate-400">Download a backup of your tasks and settings, or restore from a previous export.</p>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <button
-                                                    onClick={exportData}
-                                                    title="Download a Backup of Your Data"
-                                                    className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all hover:border-slate-500 gap-2"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                                    <span>Export Data</span>
-                                                </button>
-                                                <label
-                                                    title="Restore from a Backup File"
-                                                    className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all hover:border-slate-500 gap-2 cursor-pointer"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                                    <span>Import Data</span>
-                                                    <input
-                                                        type="file"
-                                                        accept=".json"
-                                                        className="hidden"
-                                                        onChange={(e) => {
-                                                            const file = e.target.files[0];
-                                                            if (!file) return;
-                                                            const reader = new FileReader();
-                                                            reader.onload = (ev) => {
-                                                                initiateImport(ev.target.result);
-                                                                onClose();
-                                                            };
-                                                            reader.readAsText(file);
-                                                        }}
-                                                    />
-                                                </label>
-                                            </div>
-                                            <button
-                                                onClick={generateShortLink}
-                                                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
-                                            >
-                                                <ShareIcon />
-                                                Generate Mobile Shortlink
-                                            </button>
-                                        </div>
-                                    </div>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-xl text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
+                            <h3 className="text-xl font-bold text-sky-100">Interface Settings</h3>
+                            <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
+                        </div>
+                        <div className="p-6 space-y-8 overflow-y-auto max-h-[80vh]">
+                            <div className="flex items-center justify-between">
+                                <label className="text-lg text-slate-200 font-semibold">Confirm on Delete</label>
+                                <button onClick={() => handleToggle('confirmOnDelete')} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-sky-500' : 'bg-slate-600'}`}>
+                                    <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+
+                            <div className="pt-6 border-t border-slate-700/50 space-y-4">
+                                <h4 className="text-lg font-bold text-slate-200">Data & Portability</h4>
+                                <p className="text-xs text-slate-400">Download a backup of your tasks and settings, or restore from a previous export.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <button
+                                        onClick={exportData}
+                                        className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                        <span>Export Data</span>
+                                    </button>
+                                    <label
+                                        className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all gap-2 cursor-pointer"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                        <span>Import Data</span>
+                                        <input
+                                            type="file"
+                                            accept=".json"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    initiateImport(ev.target.result);
+                                                    onClose();
+                                                };
+                                                reader.readAsText(file);
+                                            }}
+                                        />
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -3022,7 +3236,7 @@
                 });
             };
 
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=1e293b&color=38bdf8&margin=10`;
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=000000&margin=10`;
 
             return (
                 <Modal onClose={onClose}>
@@ -3062,13 +3276,11 @@
 
             useEffect(() => {
                 if (graphRef.current) {
-                    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+                    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose', flowchart: { useMaxWidth: false, htmlLabels: true } });
 
                     const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE || (tasks.some(child => child.dependsOn?.includes(t.id) && child.status !== TASK_STATUS.DONE)));
 
                     let graphDefinition = 'graph TD\n';
-
-                    // Style definitions
                     graphDefinition += 'classDef default fill:#1e293b,stroke:#475569,stroke-width:2px,color:#fff;\n';
                     graphDefinition += 'classDef done fill:#064e3b,stroke:#059669,color:#fff;\n';
                     graphDefinition += 'classDef blocked fill:#451a03,stroke:#d97706,color:#fff,stroke-dasharray: 5 5;\n';
@@ -3078,26 +3290,33 @@
                     const edges = [];
 
                     activeTasks.forEach(task => {
-                        const safeId = 't' + task.id.replace(/-/g, ''); // Mermaid needs clean IDs
+                        const safeId = 't' + task.id.replace(/-/g, '');
                         let className = 'default';
 
                         if (task.status === TASK_STATUS.DONE) className = 'done';
                         else {
                             const isBlocked = task.dependsOn?.some(depId => tasks.find(t => t.id === depId)?.status !== TASK_STATUS.DONE);
                             if (isBlocked) className = 'blocked';
-                            else if (task.dependsOn?.length > 0) className = 'ready'; // Has deps but all done
+                            else if (task.dependsOn?.length > 0) className = 'ready';
                         }
 
-                        // Truncate title for graph
+                        // Clean and truncate title
                         let title = task.title.replace(/["#]/g, '');
-                        if (title.length > 20) title = title.substring(0, 17) + '...';
+                        if (title.length > 25) title = title.substring(0, 22) + '...';
 
-                        graphDefinition += `${safeId}["${title}"]:::${className}\n`;
+                        // Add project label if available
+                        let label = title;
+                        if (task.project) {
+                            let projectPrefix = task.project.replace(/["#]/g, '');
+                            if (projectPrefix.length > 15) projectPrefix = projectPrefix.substring(0, 12) + '...';
+                            label = `<div style="display:flex;flex-direction:column;gap:4px;"><span>${title}</span><small style="opacity:0.6;font-size:0.7em;font-weight:normal;letter-spacing:0.05em;text-transform:uppercase;">${projectPrefix}</small></div>`;
+                        }
+
+                        graphDefinition += `${safeId}["${label}"]:::${className}\n`;
                         nodes.add(task.id);
 
                         if (task.dependsOn) {
                             task.dependsOn.forEach(depId => {
-                                // Only show edge if dep is also in our active/relevant set
                                 if (activeTasks.some(t => t.id === depId)) {
                                     const safeDepId = 't' + depId.replace(/-/g, '');
                                     edges.push(`${safeDepId} --> ${safeId}\n`);
@@ -3122,16 +3341,16 @@
 
             return (
                 <Modal onClose={onClose}>
-                    <div className="bg-slate-900 rounded-lg shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl h-full md:max-h-[85vh] text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
-                            <h3 className="text-xl font-bold text-sky-100">Dependency Graph</h3>
+                            <h3 className="text-xl font-bold text-sky-100 italic tracking-tight">Kodō</h3>
                             <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
                         </div>
-                        <div className="flex-grow overflow-auto p-4 flex items-center justify-center bg-slate-950/50" ref={graphRef}>
-                            <div className="text-slate-500 animate-pulse">Generating Graph...</div>
+                        <div className="flex-grow overflow-auto p-4 flex items-start justify-center bg-slate-900/30" ref={graphRef}>
+                            <div className="text-slate-500 animate-pulse">Generating Map...</div>
                         </div>
-                        <div className="p-2 text-xs text-slate-500 text-center border-t border-slate-800">
-                            Green: Done | Blue: Unlocked | Amber: Blocked | Gray: No Dependencies
+                        <div className="p-3 text-[10px] uppercase font-bold tracking-widest text-slate-500 text-center border-t border-slate-700/50 bg-slate-800/30">
+                            <span className="text-emerald-500">Green: Done</span> | <span className="text-sky-400">Blue: Unlocked</span> | <span className="text-amber-500">Amber: Blocked</span> | <span className="text-slate-400">Gray: Idle</span>
                         </div>
                     </div>
                 </Modal>
