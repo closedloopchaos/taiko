@@ -8,7 +8,10 @@
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <!-- Custom CSS for animations and theming -->
     <style>
@@ -146,7 +149,7 @@
 
         // -----------------------------------------------------------------------------------------------------------------------------  THIS IS WHERE THE RELEASE NOTES ARE -----------------------------------------------------------------------------------------------------------------------------
         // --- Global Constants & Configurations ---
-        const CURRENT_APP_VERSION = '1.4.0';
+        const CURRENT_APP_VERSION = '1.5.0';
 
         const RELEASE_NOTES = {
             '1.0.0': {
@@ -206,7 +209,7 @@
                 ]
             },
             '1.4.0': {
-                title: "What's New in Version 1.4.0",
+                title: "Previous Version: 1.4.0",
                 notes: [
                     {
                         title: "💾 Data Portability (Backup & Restore)",
@@ -227,6 +230,27 @@
                     {
                         title: "🎉 Completion Celebration",
                         description: "Enjoy a burst of confetti and a satisfying chime every time you mark a task as completed. You've earned it!"
+                    }
+                ]
+            },
+            '1.5.0': {
+                title: "What's New in Version 1.5.0",
+                notes: [
+                    {
+                        title: "🔗 Enhanced Dependency Visualization",
+                        description: "Dependency status is now clearer than ever! Blocked tasks show a 'Waiting: X' badge indicating how many incomplete dependencies are holding them back. Tasks with satisfied dependencies show a 'Ready' badge, making it easy to spot what's actionable."
+                    },
+                    {
+                        title: "📊 Dependency Graph View",
+                        description: "Visualize your entire task dependency chain with the new graph view (accessible via the graph icon in the toolbar). See at a glance how tasks flow and which ones are blocking others, with color-coded nodes for status."
+                    },
+                    {
+                        title: "📱 Improved Shortlink Functionality",
+                        description: "Shortlinks now include nearly all task data (notes, due dates, size, dependencies, time tracking) and feature a simpler QR code for easier mobile scanning. Project assignments are now preserved when sharing."
+                    },
+                    {
+                        title: "✏️ Double-Click Project Rename",
+                        description: "Quickly rename projects by double-clicking on the project header in the task list. The 'Unassigned' category now only appears when a task has no project assigned."
                     }
                 ]
             }
@@ -330,8 +354,7 @@
             const [tasks, setTasks] = useState([]);
             const [projectSettings, setProjectSettings] = useState({});
             const [settings, setSettings] = useState({
-                confirmOnDelete: true,
-                animationSettings: { enabled: true, particleCount: 350, connectionDistance: 200, particleSpeed: 0.3, mouseInteraction: true, clickPulse: true }
+                confirmOnDelete: true
             });
 
             // --- Modal-related State ---
@@ -345,8 +368,102 @@
 
             const appId = 'taiko-app-local';
 
-            // --- Data Migration Effect ---
+            const [importConfirmation, setImportConfirmation] = useState({ show: false, data: null, taskCount: 0 });
+
+            const processImportedData = useCallback((data) => {
+                // Handle legacy import format vs new minimal format
+                const isMinimal = !data.tasks && data.t;
+                const taskData = isMinimal ? data.t : data.tasks;
+
+                if (taskData) {
+                    let processedTasks = [];
+                    if (isMinimal) {
+                        // Rehydrate minimal tasks
+                        processedTasks = taskData.map(t => ({
+                            id: crypto.randomUUID(), // New IDs for imported tasks
+                            title: t[0],
+                            priority: t[1],
+                            tags: t[2],
+                            checklist: t[3] ? t[3].map(i => ({ id: crypto.randomUUID(), text: i[0], completed: i[1] === 1 })) : [],
+                            project: t[4] || null,
+                            // New fields with fallbacks for older links
+                            id: t[5] || crypto.randomUUID(),
+                            notes: t[6] || '',
+                            dueDate: t[7] || null,
+                            size: t[8] || null,
+                            dependsOn: t[9] || [],
+                            status: t[10] || TASK_STATUS.TO_DO,
+                            timeSpentSeconds: t[11] || 0,
+
+                            created: new Date().toISOString(),
+                            activityLog: [{ message: 'Imported via shortlink', timestamp: new Date().toISOString() }]
+                        }));
+                    } else {
+                        // Standard format
+                        processedTasks = taskData.map(t => ({
+                            ...t,
+                            activityLog: t.activityLog || [{ message: 'Imported via shortlink', timestamp: new Date().toISOString() }],
+                            checklist: t.checklist || [],
+                            tags: t.tags || [],
+                            dependsOn: t.dependsOn || []
+                        }));
+                    }
+
+                    // Clean up orphaned dependencies: remove any dependsOn IDs that don't exist in the imported set
+                    // This happens when upstream tasks were completed and thus not included in the export
+                    const importedTaskIds = new Set(processedTasks.map(t => t.id));
+                    processedTasks = processedTasks.map(t => ({
+                        ...t,
+                        dependsOn: (t.dependsOn || []).filter(depId => importedTaskIds.has(depId))
+                    }));
+
+                    setTasks(processedTasks);
+                }
+
+                const settingsData = data.settings || data.s;
+                if (settingsData) setSettings(settingsData);
+
+                const projData = data.projectSettings || data.p;
+                if (projData) setProjectSettings(projData);
+
+                const collapsedData = data.collapsedProjects || data.c;
+                if (collapsedData) setCollapsedProjects(collapsedData);
+
+                window.history.replaceState(null, null, window.location.pathname); // Clean URL
+            }, []);
+
+            // --- Data Migration & URL Import Effect ---
             useEffect(() => {
+                // Check for import data in URL hash
+                if (window.location.hash && (window.location.hash.startsWith('#import=') || window.location.hash.startsWith('#i='))) {
+                    try {
+                        const hash = window.location.hash;
+                        const compressed = hash.startsWith('#i=') ? hash.substring(3) : hash.substring(8);
+                        const decompressed = LZString.decompressFromEncodedURIComponent(compressed);
+
+                        if (decompressed) {
+                            const data = JSON.parse(decompressed);
+
+                            // Handle legacy import format vs new minimal format
+                            const isMinimal = !data.tasks && data.t;
+                            const taskData = isMinimal ? data.t : data.tasks;
+                            const taskCount = taskData ? taskData.length : 0;
+
+                            if (taskData) {
+                                // Trigger Modal
+                                setImportConfirmation({
+                                    show: true,
+                                    data: data,
+                                    taskCount: taskCount
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Failed to process share link:", e);
+                        alert("Invalid or corrupted share link.");
+                    }
+                }
+
                 const savedTasks = localStorage.getItem(`${appId}-tasks`);
                 if (savedTasks) {
                     let tasksToMigrate = JSON.parse(savedTasks);
@@ -373,8 +490,7 @@
                 if (savedTasks) try { setTasks(JSON.parse(savedTasks)); } catch { console.error("Could not parse saved tasks."); }
 
                 const defaultSettings = {
-                    confirmOnDelete: true,
-                    animationSettings: { enabled: true, particleCount: 350, connectionDistance: 200, particleSpeed: 0.3, mouseInteraction: true, clickPulse: true }
+                    confirmOnDelete: true
                 };
 
                 const savedSettings = localStorage.getItem(`${appId}-settings`);
@@ -383,8 +499,7 @@
                         const parsed = JSON.parse(savedSettings);
                         // Deep merge for animationSettings
                         const mergedSettings = {
-                            ...defaultSettings, ...parsed,
-                            animationSettings: { ...defaultSettings.animationSettings, ...(parsed.animationSettings || {}) }
+                            ...defaultSettings, ...parsed
                         };
                         setSettings(mergedSettings);
                     } catch {
@@ -434,9 +549,8 @@
 
             // --- Effect to dispatch animation settings changes to the global scope ---
             useEffect(() => {
-                const event = new CustomEvent('animationSettingsChange', { detail: settings.animationSettings });
-                window.dispatchEvent(event);
-            }, [settings.animationSettings]);
+                // Settings change effect removed as animation system is deleted
+            }, []);
 
             // --- Effect to auto-collapse 'Completed' project when it becomes empty ---
             useEffect(() => {
@@ -530,6 +644,8 @@
             }, []);
 
             const deleteTask = useCallback((id) => {
+                playTone(300, 0.1, 'square', 0.2); // Initial deletion sound
+                setTimeout(() => playTone(200, 0.2, 'square', 0.2), 100); // Decaying finish
                 setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
             }, []);
 
@@ -596,24 +712,70 @@
                 URL.revokeObjectURL(url);
             }, [tasks, settings, projectSettings, collapsedProjects]);
 
+            const generateShortLink = useCallback(() => {
+                // ... (filtering logic same as before)
+                const activeTasks = tasks
+                    .filter(t => t.status !== TASK_STATUS.DONE)
+                    .map(t => {
+                        const minimalChecklist = (t.checklist || []).map(i => [i.text, i.completed ? 1 : 0]);
+                        return [
+                            t.title,            // 0
+                            t.priority,         // 1
+                            t.tags || [],       // 2
+                            minimalChecklist,   // 3
+                            t.project,          // 4
+                            t.id,               // 5
+                            t.notes,            // 6
+                            t.dueDate,          // 7
+                            t.size,             // 8
+                            t.dependsOn,        // 9
+                            t.status,           // 10
+                            t.timeSpentSeconds  // 11
+                        ];
+                    });
+
+                const payload = {
+                    t: activeTasks,
+                    s: settings,
+                    p: projectSettings,
+                    c: collapsedProjects,
+                    v: CURRENT_APP_VERSION
+                };
+
+                try {
+                    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+                    const url = `${window.location.origin}${window.location.pathname}#i=${compressed}`;
+                    return url; // Just return the URL, let the UI handle displaying it
+                } catch (error) {
+                    console.error("Link generation failed:", error);
+                    return null;
+                }
+            }, [tasks, settings, projectSettings, collapsedProjects]);
+
             const importData = useCallback((jsonData) => {
+                // Legacy direct import, kept for safety but functionality moved to initiateImport with modal
                 try {
                     const data = JSON.parse(jsonData);
-                    if (data.tasks) {
-                        setTasks(data.tasks);
-                    }
-                    if (data.settings) {
-                        setSettings(data.settings);
-                    }
-                    if (data.projectSettings) {
-                        setProjectSettings(data.projectSettings);
-                    }
-                    if (data.collapsedProjects) {
-                        setCollapsedProjects(data.collapsedProjects);
-                    }
+                    initiateImport(jsonData);
                     return true;
                 } catch (e) {
-                    console.error("Failed to import data:", e);
+                    return false;
+                }
+            }, []);
+
+            const initiateImport = useCallback((jsonData) => {
+                try {
+                    const data = JSON.parse(jsonData);
+                    // Handle legacy and new formats for count
+                    const isMinimal = !data.tasks && data.t;
+                    const taskData = isMinimal ? data.t : data.tasks;
+                    const taskCount = taskData ? taskData.length : 0;
+
+                    setImportConfirmation({ show: true, data: data, taskCount: taskCount });
+                    return true;
+                } catch (error) {
+                    console.error("Failed to parse import data", error);
+                    alert("Failed to parse data. Invalid JSON format.");
                     return false;
                 }
             }, []);
@@ -628,14 +790,16 @@
                 collapsedProjects,
                 toggleProjectCollapse,
                 searchQuery, setSearchQuery,
-                exportData, importData
+                exportData, importData, generateShortLink, processImportedData, initiateImport,
+                importConfirmation, setImportConfirmation
             }), [
                 tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks, renameProject, deleteProject, updateProjectSetting,
                 settings, setSettings, allTags, projectSettings,
                 taskToDelete, setTaskToDelete,
                 activeTags, setActiveTags, selectedTaskId,
                 collapsedProjects, toggleProjectCollapse,
-                searchQuery, exportData, importData
+                searchQuery, exportData, importData, generateShortLink, processImportedData, initiateImport,
+                importConfirmation
             ]);
 
             return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -736,6 +900,7 @@
         ));
         const CheckIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>);
         const PlusIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
+        const ShareIcon = React.memo(() => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>);
         const TaikoLogo = React.memo(() => <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-white"><g stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M 25,30 C 25,10 75,10 75,30 V 70 C 75,90 25,90 25,70 Z" fill="rgba(255,255,255,0.1)" /><path d="M 75,30 C 90,30 90,70 75,70" /><path d="M 25,30 C 10,30 10,70 25,70" /><circle cx="50" cy="50" r="28" strokeWidth="3" /><circle cx="50" cy="50" r="8" fill="currentColor" /></g></svg>);
 
         // --- Time & Countdown Components (Memoized) ---
@@ -1313,8 +1478,11 @@
                                             <input ref={titleInputRef} type="text" value={title} onChange={e => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} className={`w-full bg-slate-900/50 rounded-md py-1 text-slate-50 font-semibold text-lg border border-slate-600 focus:ring-2 focus:ring-sky-500`} />
                                         ) : (
                                             <div className="flex items-center gap-2">
-                                                {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
-                                                {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
+                                                {isBlocked && (() => {
+                                                    const blockedCount = (task.dependsOn || []).filter(depId => tasks.find(t => t.id === depId)?.status !== TASK_STATUS.DONE).length;
+                                                    return <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">Waiting: {blockedCount}</span>;
+                                                })()}
+                                                {isUnlocked && <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">Ready</span>}
                                                 <h3 onDoubleClick={isLocked ? undefined : () => setIsEditingTitle(true)} title={isLocked ? "Task is completed" : "Double-click to edit title"} className={`font-semibold text-slate-50 break-words text-lg rounded-md transition-colors ${isLocked ? 'cursor-default line-through text-slate-500' : 'cursor-pointer hover:bg-slate-700/50 px-2 -mx-2 py-1 -my-1'}`}>{task.title}</h3>
                                             </div>
                                         )}
@@ -1420,7 +1588,6 @@
                                                     disabled={isLocked}
                                                     className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${task.timingSessionStartTime ? 'bg-red-500/80 hover:bg-red-500 text-white' : 'bg-green-500/80 hover:bg-green-500 text-white'}`}
                                                 >
-                                                    {task.timingSessionStartTime ? <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16"><path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z" /></svg>}
                                                     {task.timingSessionStartTime ? 'Stop' : 'Start'}
                                                 </button>
                                             </div>
@@ -1647,7 +1814,7 @@
                                                 disabled={isLocked}
                                                 className="text-sm bg-slate-800 text-slate-200 px-2 py-1 rounded-md border border-slate-600 hover:bg-slate-700 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
                                             >
-                                                <option value="">Unassigned</option>
+                                                {(!task.project) && <option value="">Unassigned</option>}
                                                 {allTags.map(project => (
                                                     <option key={project} value={project}>{project}</option>
                                                 ))}
@@ -1717,8 +1884,11 @@
                     <div className="flex justify-between items-start gap-2">
                         <div className="flex-grow min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                                {isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2a1 1 0 102 0V7a5 5 0 00-5-5z" /></svg>}
-                                {isBlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>}
+                                {isBlocked && (() => {
+                                    const blockedCount = task.dependsOn?.filter(depId => allTasks.find(t => t.id === depId)?.status !== TASK_STATUS.DONE).length || 0;
+                                    return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">Wait: {blockedCount}</span>;
+                                })()}
+                                {isUnlocked && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">Ready</span>}
                                 <p className={`font-semibold break-words ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>{task.title}</p>
                             </div>
 
@@ -1765,7 +1935,23 @@
         });
 
         const TaskList = React.memo(({ tasks, selectedTaskId, onSelectTask, onProjectHeaderClick, selectedProjectName, onShowDeleteAllModal, completedTasksCount, onAddTask }) => {
-            const { projectSettings, collapsedProjects, toggleProjectCollapse } = useAppContext();
+            const { projectSettings, collapsedProjects, toggleProjectCollapse, renameProject } = useAppContext();
+            const [editingProject, setEditingProject] = useState(null);
+            const [newProjectName, setNewProjectName] = useState('');
+
+            const handleProjectDoubleClick = (projectName) => {
+                if (projectName === 'Completed' || projectName === 'Unassigned') return;
+                setEditingProject(projectName);
+                setNewProjectName(projectName);
+            };
+
+            const handleProjectRenameSubmit = (oldName) => {
+                if (newProjectName && newProjectName !== oldName) {
+                    renameProject(oldName, newProjectName);
+                }
+                setEditingProject(null);
+            };
+
             const groupedAndSortedTasks = useMemo(() => { // This logic is correct, no changes needed here.
                 // Manual sorting by rank is now the primary method.
                 const activeTaskSorter = (a, b) => {
@@ -1815,15 +2001,41 @@
                         const style = settings.color ? { backgroundColor: settings.color } : {};
                         const bgColorClass = settings.color ? '' : fallbackColor;
 
+                        const isEditing = editingProject === projectName;
+
                         return (
                             <div key={projectName} className={`${bgColorClass} border rounded-lg backdrop-blur-sm transition-all duration-300 ${selectedProjectName === projectName ? 'border-sky-400' : 'border-slate-700/40'} ${projectName === 'Completed' ? 'border-green-700/60' : ''}`} style={style}>
                                 <div className={`flex items-center justify-between w-full text-left text-sm font-bold uppercase tracking-wider pl-2 pr-4 pt-3 pb-2 border-b border-indigo-800/50 transition-colors`}>
                                     <button onClick={() => toggleProjectCollapse(projectName)} title={isCollapsed ? 'Expand project' : 'Collapse project'} className="p-2 rounded-full hover:bg-slate-700/50 text-indigo-300 flex-shrink-0">
                                         <ChevronDownIcon className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                                     </button>
-                                    <div onClick={() => onProjectHeaderClick(projectName)} className="flex-grow cursor-pointer hover:bg-white/5 p-2 rounded-md">
-                                        <span className="text-indigo-300 hover:underline">{projectName} ({tasksInGroup.length})</span>
-                                    </div>
+
+                                    {isEditing ? (
+                                        <div className="flex-grow p-2">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={newProjectName}
+                                                onChange={(e) => setNewProjectName(e.target.value)}
+                                                onBlur={() => handleProjectRenameSubmit(projectName)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleProjectRenameSubmit(projectName);
+                                                    if (e.key === 'Escape') setEditingProject(null);
+                                                }}
+                                                className="w-full bg-slate-900 text-indigo-300 rounded-md px-2 py-1 border border-indigo-500 focus:outline-none"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div
+                                            onClick={() => onProjectHeaderClick(projectName)}
+                                            onDoubleClick={(e) => { e.stopPropagation(); handleProjectDoubleClick(projectName); }}
+                                            className="flex-grow cursor-pointer hover:bg-white/5 p-2 rounded-md transition-colors"
+                                            title="Double-click to rename"
+                                        >
+                                            <span className="text-indigo-300 hover:underline">{projectName} ({tasksInGroup.length})</span>
+                                        </div>
+                                    )}
+
                                     {projectName !== 'Completed' && <>
                                         <button onClick={() => onAddTask(projectName)} title={`Add task to ${projectName}`} className="p-1 text-sky-300 hover:text-white rounded-full hover:bg-sky-500/30 transition-colors flex-shrink-0 mx-1"><PlusIcon /></button>
                                     </>}
@@ -1848,26 +2060,26 @@
         // --- Main Presentation Component ---
         const App = () => {
             const {
-                tasks, addTask,
-                settings, setSettings,
-                taskToDelete, setTaskToDelete, deleteAllCompletedTasks,
-                allTags, deleteTask, updateTask, // Core data functions
-                activeTags, setActiveTags,                     // Filter state (now just for projects/priorities)
-                selectedTaskId, setSelectedTaskId,             // Detail view state,
-                collapsedProjects, toggleProjectCollapse,
-                searchQuery, setSearchQuery
+                tasks, updateTask, addTask, deleteTask, deleteAllCompletedTasks, renameProject, deleteProject, updateProjectSetting,
+                settings, setSettings, allTags, projectSettings,
+                taskToDelete, setTaskToDelete,
+                activeTags, setActiveTags,
+                selectedTaskId, setSelectedTaskId,
+                collapsedProjects,
+                toggleProjectCollapse,
+                searchQuery, setSearchQuery,
+                exportData, importData, generateShortLink,
+                importConfirmation, setImportConfirmation, processImportedData
             } = useAppContext();
 
-            const now = useNow(); // Get current time, updates every second
-
-            const [showSettings, setShowSettings] = useState(false);
-            const [clockTimezone, setClockTimezone] = useState('America/New_York');
-
-            // State for the summary modal
+            const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
             const [showSummaryModal, setShowSummaryModal] = useState(false);
             const [summaryText, setSummaryText] = useState('');
-            const [showDeleteAllCompletedModal, setShowDeleteAllCompletedModal] = useState(false);
+            const [clockTimezone, setClockTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+            const now = useNow(60000); // Update every minute for reminders
             const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+            const [showGraphModal, setShowGraphModal] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
             const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
             const [selectedProjectName, setSelectedProjectName] = useState(null);
             const [taskToComplete, setTaskToComplete] = useState(null);
@@ -2000,6 +2212,20 @@
                 setSelectedTaskId(newTask.id); // Select the newly created task
                 setShowAddTaskModal(false);
             };
+
+            const [showShortLinkModal, setShowShortLinkModal] = useState(false);
+            const [shortLinkUrl, setShortLinkUrl] = useState('');
+
+            const handleGenerateShortLink = useCallback(() => {
+                const url = generateShortLink();
+                if (url) {
+                    setShortLinkUrl(url);
+                    setShowShortLinkModal(true);
+                } else {
+                    alert("Failed to generate link. Data might be too large.");
+                }
+            }, [generateShortLink]);
+
             const handleConfirmDeleteAllCompleted = useCallback(() => {
                 deleteAllCompletedTasks();
                 setShowDeleteAllCompletedModal(false);
@@ -2172,8 +2398,24 @@
                     {showNewProjectModal && <NewProjectModal onAdd={handleCreateProject} onCancel={() => setShowNewProjectModal(false)} />}
                     {showSettings && <SettingsModal settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
                     {showAddTaskModal && <AddTaskModal onAdd={handleAddTaskFromModal} onCancel={() => setShowAddTaskModal(false)} allTags={allTags} />}
+                    {showShortLinkModal && <ShortLinkModal url={shortLinkUrl} onClose={() => setShowShortLinkModal(false)} />}
+                    {showGraphModal && <DependencyGraphModal onClose={() => setShowGraphModal(false)} />}
+                    {importConfirmation.show && (
+                        <ImportModal
+                            data={importConfirmation.data}
+                            taskCount={importConfirmation.taskCount}
+                            onConfirm={() => {
+                                processImportedData(importConfirmation.data);
+                                setImportConfirmation({ show: false, data: null, taskCount: 0 });
+                            }}
+                            onCancel={() => {
+                                setImportConfirmation({ show: false, data: null, taskCount: 0 });
+                                window.history.replaceState(null, null, window.location.pathname);
+                            }}
+                        />
+                    )}
 
-                    <header className="sticky top-0 z-20 px-4 py-2 bg-gradient-to-b from-slate-950/95 to-sky-900/40 backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-sky-900/40 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+                    <header className="sticky top-0 z-20 px-4 py-2 bg-black backdrop-blur-lg shadow-2xl shadow-black/30 border-b border-white/10 flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
                         {/* --- Left Side: Logo, Title, Toolbar --- */}
                         <div className="flex items-center gap-4">
                             {showDetailViewOnMobile ? (
@@ -2190,7 +2432,15 @@
                                     <h1 className="text-3xl font-bold" style={{ color: '#E0E7FF', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Taiko</h1>
                                 </>
                             )}
-                            <HeaderToolbar isSmallScreen={windowWidth < 768} onShowSettings={() => setShowSettings(true)} onGenerateSummary={generateCompletedTasksSummary} onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)} showDeleteAllButton={completedTasksCount > 0} />
+                            <HeaderToolbar
+                                isSmallScreen={windowWidth < 768}
+                                onShowSettings={() => setShowSettings(true)}
+                                onGenerateSummary={generateCompletedTasksSummary}
+                                onShowDeleteAllModal={() => setShowDeleteAllCompletedModal(true)}
+                                showDeleteAllButton={completedTasksCount > 0}
+                                onGenerateShortLink={handleGenerateShortLink}
+                                onShowGraph={() => setShowGraphModal(true)}
+                            />
                         </div>
 
                         {/* --- Right Side: Add Task & Clock --- */}
@@ -2359,7 +2609,7 @@
                 </div>
             );
         });
-        const HeaderToolbar = React.memo(({ isSmallScreen, onShowSettings, onGenerateSummary, onShowDeleteAllModal, showDeleteAllButton }) => {
+        const HeaderToolbar = React.memo(({ isSmallScreen, onShowSettings, onGenerateSummary, onShowDeleteAllModal, showDeleteAllButton, onGenerateShortLink, onShowGraph }) => {
             const [isMenuOpen, setIsMenuOpen] = useState(false);
             const menuRef = useRef(null);
 
@@ -2376,6 +2626,7 @@
             const menuItems = (
                 <>
                     <button onClick={onShowSettings} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Settings</button>
+                    <button onClick={onGenerateShortLink} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Copy Mobile Shortlink</button>
                     <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Report Issue</a>
                     <button onClick={onGenerateSummary} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700">Generate Summary</button>
                     {showDeleteAllButton && <button onClick={onShowDeleteAllModal} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20">Delete All Completed</button>}
@@ -2399,6 +2650,11 @@
 
             return (
                 <div className="flex items-center flex-wrap gap-2">
+                    <button onClick={onShowGraph} title="View Dependency Graph" className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800/50 rounded-full transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                    </button>
+                    <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
+                    <button onClick={onGenerateShortLink} title="Share List (QR Code / Link)" className="p-2 text-slate-400 hover:text-sky-400 hover:bg-slate-800/50 rounded-full transition-all"><ShareIcon /></button>
                     <button onClick={onShowSettings} title="Settings" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><SettingsIcon /></button>
                     <a href="https://github.com/closedloopchaos/taiko/issues/new/choose" title="Report Issue or Submit Feedback" target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><BugIcon /></a>
                     <button onClick={onGenerateSummary} title="Generate Summary of Completed Tasks" className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-700 transition-colors"><DocumentTextIcon /></button>
@@ -2489,7 +2745,7 @@
 
             return (
                 <Modal onClose={onCancel}>
-                    <ModalContent title="Add New Task" onClose={onCancel}>
+                    <ModalContent title="Add New Task" onClose={onCancel} isFullScreen={false}>
                         <div className="space-y-4">
                             {/* Title Input */}
                             <input
@@ -2560,20 +2816,71 @@
                 </Modal>
             );
         };
-        const Modal = ({ children, onClose }) => <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">{children}</div>;
-        const ModalContent = ({ title, children, onClose, headerActions }) => (
-            <div
-                className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-md text-white flex flex-col max-h-[90vh]"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
-                    <h3 className="text-xl font-bold">{title}</h3>
-                    {headerActions && <div>{headerActions}</div>}
+        const Modal = ({ children, onClose, isFullScreen = false }) => {
+            if (isFullScreen) {
+                return (
+                    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 animate-in fade-in duration-200" onClick={onClose}>
+                        <div className="flex-grow overflow-y-auto overflow-x-hidden">
+                            <div className="min-h-full w-full flex flex-col items-center justify-start py-12 px-4 sm:px-6">
+                                {children}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            return (
+                <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                    {children}
                 </div>
-                <div className="p-4 overflow-y-auto">{children}</div>
-            </div>
+            );
+        };
+
+        const ModalContent = ({ title, children, onClose, headerActions, isFullScreen = false }) => {
+            if (isFullScreen) {
+                return (
+                    <div className="w-full max-w-2xl bg-transparent text-white flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-700/50">
+                            <h2 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400">{title}</h2>
+                            <div className="flex items-center gap-4">
+                                {headerActions}
+                                <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="relative">
+                            {children}
+                        </div>
+                    </div>
+                );
+            }
+            return (
+                <div
+                    className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-md text-white flex flex-col max-h-[90vh]"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
+                        <h3 className="text-xl font-bold">{title}</h3>
+                        {headerActions && <div>{headerActions}</div>}
+                    </div>
+                    <div className="p-4 overflow-y-auto">{children}</div>
+                </div>
+            );
+        };
+
+        const DeleteConfirmationModal = ({ onConfirm, onCancel }) => (
+            <Modal onClose={onCancel}>
+                <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3>
+                    <p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p>
+                    <div className="flex justify-center space-x-4">
+                        <button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button>
+                        <button onClick={onConfirm} title="Confirm permanent deletion" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button>
+                    </div>
+                </div>
+            </Modal>
         );
-        const DeleteConfirmationModal = ({ onConfirm, onCancel }) => <Modal onClose={onCancel}><div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-2">Delete Task?</h3><p className="text-slate-300 mb-4">Are you sure you want to permanently delete this task?</p><div className="flex justify-center space-x-4"><button onClick={onCancel} title="Cancel deletion" className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500">Cancel</button><button onClick={onConfirm} title="Confirm permanent deletion" className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-500">Delete</button></div></div></Modal>;
+
         const CompleteConfirmationModal = ({ onConfirm, onCancel, taskTitle }) => (
             <Modal onClose={onCancel}>
                 <div className="bg-slate-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
@@ -2587,107 +2894,76 @@
             </Modal>
         );
         const SettingsModal = ({ settings, onSettingsChange, onClose }) => {
-            const { exportData, importData } = useAppContext();
+            const { exportData, generateShortLink, initiateImport } = useAppContext();
             const handleToggle = (key) => onSettingsChange(p => ({ ...p, [key]: !p[key] }));
-            const handleAnimationSettingChange = (key, value) => onSettingsChange(p => ({ ...p, animationSettings: { ...p.animationSettings, [key]: value } }));
+
             return (
                 <Modal onClose={onClose}>
-                    <ModalContent title="Settings" onClose={onClose}>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <label className="text-slate-300">Confirm on Delete</label>
-                                <button onClick={() => handleToggle('confirmOnDelete')} title={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                            </div>
-                            <div className="pt-4 border-t border-slate-700/50 space-y-4">
-                                <h4 className="text-lg font-semibold text-slate-200">Background Animation</h4>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-slate-300">Enable Animation</label>
-                                    <button onClick={() => handleAnimationSettingChange('enabled', !settings.animationSettings.enabled)} title={settings.animationSettings.enabled ? "Disable background animation" : "Enable background animation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="min-h-full w-full flex flex-col items-center justify-start py-12 px-4 sm:px-6">
+                            <div className="w-full max-w-2xl bg-slate-900 text-white flex flex-col">
+                                <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-700/50">
+                                    <h2 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400">Settings</h2>
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-slate-300">Mouse Interaction</label>
-                                    <button onClick={() => handleAnimationSettingChange('mouseInteraction', !settings.animationSettings.mouseInteraction)} title={settings.animationSettings.mouseInteraction ? "Disable mouse interaction" : "Enable mouse interaction"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.mouseInteraction ? 'bg-green-500' : 'bg-slate-600'}`} disabled={!settings.animationSettings.enabled}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.mouseInteraction ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-slate-300">Click Pulse Effect</label>
-                                    <button onClick={() => handleAnimationSettingChange('clickPulse', !settings.animationSettings.clickPulse)} title={settings.animationSettings.clickPulse ? "Disable click pulse" : "Enable click pulse"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.animationSettings.clickPulse ? 'bg-green-500' : 'bg-slate-600'}`} disabled={!settings.animationSettings.enabled}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.animationSettings.clickPulse ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                                </div>
-
-                                <div className="flex flex-col space-y-2">
-                                    <label htmlFor="particleCount" className="text-slate-300 flex justify-between">
-                                        <span>Particle Count</span>
-                                        <span className="text-sky-400 font-mono">{settings.animationSettings.particleCount}</span>
-                                    </label>
-                                    <input id="particleCount" type="range" min="250" max="500" step="5"
-                                        value={settings.animationSettings.particleCount}
-                                        onChange={e => handleAnimationSettingChange('particleCount', parseInt(e.target.value, 10))}
-                                        disabled={!settings.animationSettings.enabled}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
-                                    />
-                                </div>
-                                <div className="flex flex-col space-y-2">
-                                    <label htmlFor="connectionDistance" className="text-slate-300 flex justify-between">
-                                        <span>Connection Distance</span>
-                                        <span className="text-sky-400 font-mono">{settings.animationSettings.connectionDistance}px</span>
-                                    </label>
-                                    <input id="connectionDistance" type="range" min="30" max="250" step="5"
-                                        value={settings.animationSettings.connectionDistance}
-                                        onChange={e => handleAnimationSettingChange('connectionDistance', parseInt(e.target.value, 10))}
-                                        disabled={!settings.animationSettings.enabled}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
-                                    />
-                                </div>
-                                <div className="flex flex-col space-y-2">
-                                    <label htmlFor="particleSpeed" className="text-slate-300 flex justify-between">
-                                        <span>Particle Speed</span>
-                                        <span className="text-sky-400 font-mono">{settings.animationSettings.particleSpeed.toFixed(1)}</span>
-                                    </label>
-                                    <input id="particleSpeed" type="range" min="0.1" max="2" step="0.1"
-                                        value={settings.animationSettings.particleSpeed}
-                                        onChange={e => handleAnimationSettingChange('particleSpeed', parseFloat(e.target.value))}
-                                        disabled={!settings.animationSettings.enabled}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
-                                    />
-                                </div>
-                            </div>
-                            <div className="pt-4 border-t border-slate-700/50 space-y-4">
-                                <h4 className="text-lg font-semibold text-slate-200">Data Portability</h4>
-                                <p className="text-xs text-slate-400">Download a backup of your tasks and settings, or restore from a previous export.</p>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={exportData}
-                                        className="flex-1 px-4 py-2 bg-slate-700 text-slate-200 font-semibold rounded-lg hover:bg-slate-600 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                        Export Data
-                                    </button>
-                                    <label className="flex-1 px-4 py-2 bg-slate-700 text-slate-200 font-semibold rounded-lg hover:bg-slate-600 transition-colors flex items-center justify-center gap-2 cursor-pointer">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                        Import Data
-                                        <input
-                                            type="file"
-                                            accept=".json"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (!file) return;
-                                                const reader = new FileReader();
-                                                reader.onload = (event) => {
-                                                    if (importData(event.target.result)) {
-                                                        alert("Data imported successfully!");
-                                                        onClose();
-                                                    } else {
-                                                        alert("Failed to import data. Please check the file format.");
-                                                    }
-                                                };
-                                                reader.readAsText(file);
-                                            }}
-                                        />
-                                    </label>
+                                <div className="relative">
+                                    <div className="space-y-8 p-4">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xl text-slate-200 font-semibold">Confirm on Delete</label>
+                                            <button onClick={() => handleToggle('confirmOnDelete')} title={settings.confirmOnDelete ? "Disable delete confirmation" : "Enable delete confirmation"} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-green-500' : 'bg-slate-600'}`}><span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                                        </div>
+                                        <div className="pt-4 border-t border-slate-700/50 space-y-4">
+                                            <h4 className="text-xl font-bold text-slate-200">Data & Portability</h4>
+                                            <p className="text-xs text-slate-400">Download a backup of your tasks and settings, or restore from a previous export.</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <button
+                                                    onClick={exportData}
+                                                    title="Download a Backup of Your Data"
+                                                    className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all hover:border-slate-500 gap-2"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                                    <span>Export Data</span>
+                                                </button>
+                                                <label
+                                                    title="Restore from a Backup File"
+                                                    className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all hover:border-slate-500 gap-2 cursor-pointer"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                                    <span>Import Data</span>
+                                                    <input
+                                                        type="file"
+                                                        accept=".json"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files[0];
+                                                            if (!file) return;
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                initiateImport(ev.target.result);
+                                                                onClose();
+                                                            };
+                                                            reader.readAsText(file);
+                                                        }}
+                                                    />
+                                                </label>
+                                            </div>
+                                            <button
+                                                onClick={generateShortLink}
+                                                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
+                                            >
+                                                <ShareIcon />
+                                                Generate Mobile Shortlink
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </ModalContent>
+                    </div>
                 </Modal>
             );
         };
@@ -2730,6 +3006,162 @@
                             </div>
                         </div>
                         <div className="p-4 overflow-y-auto"><pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-4 rounded-md border border-slate-700">{summary}</pre></div>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const ShortLinkModal = ({ url, onClose }) => {
+            const [copyButtonText, setCopyButtonText] = useState('Copy Link');
+
+            const handleCopy = () => {
+                navigator.clipboard.writeText(url).then(() => {
+                    setCopyButtonText('Copied!');
+                    playTone(880, 0.1, 'sine', 0.2); // Success sound
+                    setTimeout(() => setCopyButtonText('Copy Link'), 2000);
+                });
+            };
+
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=1e293b&color=38bdf8&margin=10`;
+
+            return (
+                <Modal onClose={onClose}>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-xl text-white flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
+                            <h3 className="text-xl font-bold text-sky-100">Share Link</h3>
+                            <div className="flex items-center space-x-2">
+                                <button onClick={handleCopy} className="px-3 py-1 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 text-sm transition-all duration-150 w-28 text-center">{copyButtonText}</button>
+                                <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
+                            </div>
+                        </div>
+                        <div className="p-6 flex flex-col gap-6">
+                            <p className="text-slate-400 text-sm">Scan with your phone to import tasks, or copy the link below.</p>
+
+                            <div className="flex flex-col sm:flex-row gap-6 items-center">
+                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700/50 shadow-lg flex-shrink-0">
+                                    <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 rounded-lg" />
+                                </div>
+                                <div className="flex-grow w-full">
+                                    <div className="bg-slate-950/80 p-3 rounded-md border border-slate-700/50 font-mono text-xs text-sky-300 break-all max-h-32 overflow-y-auto">
+                                        {url}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-2 text-center sm:text-left">
+                                        Link contains all active tasks and settings.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const DependencyGraphModal = ({ onClose }) => {
+            const { tasks } = useAppContext();
+            const graphRef = useRef(null);
+
+            useEffect(() => {
+                if (graphRef.current) {
+                    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+
+                    const activeTasks = tasks.filter(t => t.status !== TASK_STATUS.DONE || (tasks.some(child => child.dependsOn?.includes(t.id) && child.status !== TASK_STATUS.DONE)));
+
+                    let graphDefinition = 'graph TD\n';
+
+                    // Style definitions
+                    graphDefinition += 'classDef default fill:#1e293b,stroke:#475569,stroke-width:2px,color:#fff;\n';
+                    graphDefinition += 'classDef done fill:#064e3b,stroke:#059669,color:#fff;\n';
+                    graphDefinition += 'classDef blocked fill:#451a03,stroke:#d97706,color:#fff,stroke-dasharray: 5 5;\n';
+                    graphDefinition += 'classDef ready fill:#0c4a6e,stroke:#0ea5e9,color:#fff;\n';
+
+                    const nodes = new Set();
+                    const edges = [];
+
+                    activeTasks.forEach(task => {
+                        const safeId = 't' + task.id.replace(/-/g, ''); // Mermaid needs clean IDs
+                        let className = 'default';
+
+                        if (task.status === TASK_STATUS.DONE) className = 'done';
+                        else {
+                            const isBlocked = task.dependsOn?.some(depId => tasks.find(t => t.id === depId)?.status !== TASK_STATUS.DONE);
+                            if (isBlocked) className = 'blocked';
+                            else if (task.dependsOn?.length > 0) className = 'ready'; // Has deps but all done
+                        }
+
+                        // Truncate title for graph
+                        let title = task.title.replace(/["#]/g, '');
+                        if (title.length > 20) title = title.substring(0, 17) + '...';
+
+                        graphDefinition += `${safeId}["${title}"]:::${className}\n`;
+                        nodes.add(task.id);
+
+                        if (task.dependsOn) {
+                            task.dependsOn.forEach(depId => {
+                                // Only show edge if dep is also in our active/relevant set
+                                if (activeTasks.some(t => t.id === depId)) {
+                                    const safeDepId = 't' + depId.replace(/-/g, '');
+                                    edges.push(`${safeDepId} --> ${safeId}\n`);
+                                }
+                            });
+                        }
+                    });
+
+                    edges.forEach(edge => graphDefinition += edge);
+
+                    if (nodes.size === 0) {
+                        graphDefinition = 'graph TD\nEmpty["No Active Dependencies"]\n';
+                    }
+
+                    mermaid.render('mermaid-graph', graphDefinition).then((result) => {
+                        if (graphRef.current) {
+                            graphRef.current.innerHTML = result.svg;
+                        }
+                    }).catch(e => console.error(e));
+                }
+            }, [tasks]);
+
+            return (
+                <Modal onClose={onClose}>
+                    <div className="bg-slate-900 rounded-lg shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
+                            <h3 className="text-xl font-bold text-sky-100">Dependency Graph</h3>
+                            <button onClick={onClose} className="px-4 py-1 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 text-sm">Close</button>
+                        </div>
+                        <div className="flex-grow overflow-auto p-4 flex items-center justify-center bg-slate-950/50" ref={graphRef}>
+                            <div className="text-slate-500 animate-pulse">Generating Graph...</div>
+                        </div>
+                        <div className="p-2 text-xs text-slate-500 text-center border-t border-slate-800">
+                            Green: Done | Blue: Unlocked | Amber: Blocked | Gray: No Dependencies
+                        </div>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const ImportModal = ({ data, taskCount, onConfirm, onCancel }) => {
+            return (
+                <Modal onClose={onCancel}>
+                    <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-lg text-white flex flex-col overflow-hidden leading-relaxed" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/50">
+                            <h3 className="text-xl font-bold text-sky-100">Import Data</h3>
+                            <button onClick={onCancel} className="p-1 hover:bg-slate-700 rounded-full transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <div className="flex flex-col items-center justify-center mb-6 text-center">
+                                <div className="w-16 h-16 bg-sky-900/30 rounded-full flex items-center justify-center mb-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                </div>
+                                <h4 className="text-lg font-semibold text-white mb-2">Load {taskCount} Tasks?</h4>
+                                <p className="text-slate-400 text-sm max-w-xs">This will overwrite your current tasks and settings with the data from the link.</p>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button onClick={onCancel} className="flex-1 py-2.5 bg-slate-700 text-white font-semibold rounded-lg hover:bg-slate-600 transition-colors">Cancel</button>
+                                <button onClick={onConfirm} className="flex-1 py-2.5 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 transition-colors shadow-lg shadow-sky-900/20">Import & Overwrite</button>
+                            </div>
+                        </div>
                     </div>
                 </Modal>
             );
@@ -2799,279 +3231,6 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<TaikoApp />);
 
-    </script>
-
-    <!-- Node Garden Background Animation Script -->
-    <script>
-        const canvas = document.getElementById('node-garden-canvas');
-        const ctx = canvas.getContext('2d');
-
-        // --- Default Animation Settings ---
-        let animSettings = {
-            enabled: true,
-            particleCount: 350,
-            connectionDistance: 200,
-            particleSpeed: 0.3,
-            mouseInteraction: true,
-            clickPulse: true,
-        };
-
-        let particles = [];
-        const mouse = { x: null, y: null, radius: 150 };
-        let animationFrameId;
-        let pulses = []; // Array to store active pulse waves
-
-        // --- Animation Control based on screen size ---
-        const isSmallScreen = () => window.innerWidth < 768;
-
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            mouse.radius = isSmallScreen() ? (canvas.width / 15) + 20 : (canvas.width / 12) + 50; // Keep mouse radius update
-        }
-
-        let wasSmall = isSmallScreen();
-        window.addEventListener('resize', () => {
-            resizeCanvas();
-            const isNowSmall = isSmallScreen();
-
-            if (isNowSmall !== wasSmall) {
-                if (isNowSmall) {
-                    stopAnimation();
-                } else if (animSettings.enabled) {
-                    startAnimation();
-                }
-                wasSmall = isNowSmall;
-            }
-        });
-
-        window.addEventListener('mousemove', (event) => {
-            mouse.x = event.x;
-            mouse.y = event.y;
-        });
-
-        window.addEventListener('mouseout', () => {
-            mouse.x = null;
-            mouse.y = null;
-        });
-
-        // Listen for clicks to create a pulse
-        window.addEventListener('click', (event) => {
-            if (!animSettings.enabled || !animSettings.clickPulse) return;
-            pulses.push({
-                x: event.clientX,
-                y: event.clientY,
-                radius: 0,
-                maxRadius: Math.sqrt(canvas.width ** 2 + canvas.height ** 2), // Pulse expands to the full diagonal of the screen
-                speed: 8,
-            });
-        });
-
-        // Listen for settings changes from React
-        window.addEventListener('animationSettingsChange', (event) => {
-            const newSettings = event.detail;
-            const oldEnabled = animSettings.enabled;
-
-            // Check if particle speed changed to adjust velocity without a full reset
-            if (newSettings.enabled && newSettings.particleSpeed !== animSettings.particleSpeed && animSettings.particleSpeed > 0) {
-                const speedRatio = newSettings.particleSpeed / animSettings.particleSpeed;
-                particles.forEach(p => {
-                    p.vx *= speedRatio;
-                    p.vy *= speedRatio;
-                });
-            }
-
-            // Update the global animation settings object
-            animSettings = { ...animSettings, ...newSettings };
-
-            if (animSettings.enabled && !oldEnabled) {
-                startAnimation(); // Start if it was just enabled
-            } else if (!animSettings.enabled && oldEnabled) {
-                stopAnimation(); // Stop if it was just disabled
-            } else if (animSettings.enabled && newSettings.particleCount !== particles.length) {
-                init(); // Re-initialize if particle count changes while enabled
-            }
-        });
-
-        class Particle {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.baseSize = Math.random() * 1.5 + 0.5;
-                this.size = this.baseSize;
-                this.density = (Math.random() * 30) + 1;
-                this.defaultColor = 'rgba(100, 116, 139, 0.8)'; // slate-500
-                this.vx = (Math.random() - 0.5) * animSettings.particleSpeed; // Velocity X
-                this.vy = (Math.random() - 0.5) * animSettings.particleSpeed; // Velocity Y
-                // For pulsing effect
-                this.pulseAngle = Math.random() * Math.PI * 2;
-                this.pulseSpeed = 0.02 + Math.random() * 0.02;
-            }
-
-            draw() {
-                ctx.fillStyle = this.currentColor || this.defaultColor;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.closePath();
-                ctx.fill();
-            }
-
-            update() {
-                // Autonomous movement and wall bouncing
-                this.x += this.vx;
-                this.y += this.vy;
-                if (this.x <= 0 || this.x >= canvas.width) { this.vx *= -1; }
-                if (this.y <= 0 || this.y >= canvas.height) { this.vy *= -1; }
-
-                // Pulsing effect
-                this.pulseAngle += this.pulseSpeed;
-                this.size = this.baseSize + Math.sin(this.pulseAngle) * (this.baseSize * 0.5);
-
-                // Mouse interaction - determine color
-                this.currentColor = null; // Reset color
-                if (animSettings.mouseInteraction && mouse.x !== null) {
-                    let dx = mouse.x - this.x;
-                    let dy = mouse.y - this.y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-                    this.currentColor = getColorFromDistance(distance, mouse.radius);
-                }
-
-                // Pulse interaction - overrides mouse color
-                for (let i = 0; i < pulses.length; i++) {
-                    const pulse = pulses[i];
-                    const dx = pulse.x - this.x;
-                    const dy = pulse.y - this.y;
-                    const distanceToPulseCenter = Math.sqrt(dx * dx + dy * dy);
-                    const pulseWidth = 60; // How thick the ripple wave is
-
-                    if (distanceToPulseCenter > pulse.radius - pulseWidth && distanceToPulseCenter < pulse.radius) {
-                        // The particle is inside the ripple band
-                        this.currentColor = `rgb(34, 197, 94)`; // A bright green color for the pulse
-                    }
-                }
-            }
-        }
-
-        // Helper function to get color based on distance to mouse
-        function getColorFromDistance(distance, maxDistance) {
-            if (distance < maxDistance) {
-                const normalizedDistance = distance / maxDistance; // 0 (closest) to 1 (farthest)
-                let r, g, b;
-
-                // Gradient: Red -> Yellow -> Green
-                if (normalizedDistance < 0.5) {
-                    // Interpolate from Red (239, 68, 68) to Yellow (251, 191, 36)
-                    const t = normalizedDistance * 2; // Scale to 0-1 range
-                    r = 239 + (251 - 239) * t;
-                    g = 68 + (191 - 68) * t;
-                    b = 68 + (36 - 68) * t;
-                } else {
-                    // Interpolate from Yellow (251, 191, 36) to Green (34, 197, 94)
-                    const t = (normalizedDistance - 0.5) * 2; // Scale to 0-1 range
-                    r = 251 + (34 - 251) * t;
-                    g = 191 + (197 - 191) * t;
-                    b = 36 + (94 - 36) * t;
-                }
-                return `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
-            }
-            return null;
-        }
-
-        function init() {
-            if (!animSettings.enabled) return;
-            particles = [];
-            for (let i = 0; i < animSettings.particleCount; i++) {
-                particles.push(new Particle());
-            }
-        }
-
-        function animate() {
-            if (!animSettings.enabled || isSmallScreen()) return;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Update and draw pulses
-            for (let i = pulses.length - 1; i >= 0; i--) {
-                pulses[i].radius += pulses[i].speed;
-                if (pulses[i].radius > pulses[i].maxRadius) {
-                    pulses.splice(i, 1); // Remove pulse when it's done
-                }
-            }
-
-            // Draw connecting lines
-            for (let i = 0; i < particles.length; i++) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const p1 = particles[i];
-                    const p2 = particles[j];
-                    const dx = p1.x - p2.x;
-                    const dy = p1.y - p2.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < animSettings.connectionDistance) {
-                        ctx.beginPath();
-
-                        let strokeStyle = `rgba(100, 116, 139, ${1 - distance / animSettings.connectionDistance})`;
-
-                        // Check for mouse interaction color
-                        if (animSettings.mouseInteraction && mouse.x !== null) {
-                            const midX = (p1.x + p2.x) / 2;
-                            const midY = (p1.y + p2.y) / 2;
-                            const mouseDx = mouse.x - midX;
-                            const mouseDy = mouse.y - midY;
-                            const midPointDistanceToMouse = Math.sqrt(mouseDx * mouseDx + mouseDy * mouseDy);
-                            const lineColor = getColorFromDistance(midPointDistanceToMouse, mouse.radius);
-
-                            if (lineColor) {
-                                // Extract the RGB part and add the alpha from the original style
-                                const alpha = 1 - distance / animSettings.connectionDistance;
-                                strokeStyle = lineColor.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
-                            }
-                        }
-
-                        // Check for pulse interaction on lines
-                        for (let k = 0; k < pulses.length; k++) {
-                            const pulse = pulses[k];
-                            const midX = (p1.x + p2.x) / 2;
-                            const midY = (p1.y + p2.y) / 2;
-                            const dx = pulse.x - midX;
-                            const dy = pulse.y - midY;
-                            const distanceToPulseCenter = Math.sqrt(dx * dx + dy * dy);
-                            if (distanceToPulseCenter > pulse.radius - 60 && distanceToPulseCenter < pulse.radius) {
-                                const alpha = 1 - distance / animSettings.connectionDistance;
-                                strokeStyle = `rgba(34, 197, 94, ${alpha * 1.5})`; // Make pulse lines slightly brighter
-                            }
-                        }
-
-                        ctx.strokeStyle = strokeStyle;
-                        ctx.lineWidth = 0.4;
-                        ctx.moveTo(p1.x, p1.y);
-                        ctx.lineTo(p2.x, p2.y);
-                        ctx.stroke();
-                        ctx.closePath();
-                    }
-                }
-            }
-
-            // Update and draw each particle
-            particles.forEach(p => { p.update(); p.draw(); });
-
-            animationFrameId = requestAnimationFrame(animate);
-        }
-
-        function startAnimation() {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            init();
-            animate();
-        }
-
-        function stopAnimation() {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            animationFrameId = null; // Explicitly clear the animation frame ID
-        }
-
-        resizeCanvas();
-        startAnimation();
     </script>
 </body>
 
