@@ -139,6 +139,17 @@
                 background-color: rgba(15, 23, 42, 0.8);
             }
         }
+
+        /* Prevent scroll chaining on mobile */
+        .no-scroll-chain {
+            overscroll-behavior: contain;
+        }
+
+        /* Body lock for modals */
+        .body-lock {
+            overflow: hidden !important;
+            touch-action: none;
+        }
     </style>
 </head>
 
@@ -2361,6 +2372,15 @@
             const showDetailViewOnMobile = isSmallScreen && (selectedTaskId || selectedProjectName);
             const showListViewOnMobile = isSmallScreen && !showDetailViewOnMobile;
 
+            // --- Body Lock Effect ---
+            useEffect(() => {
+                if (showMobileSidebar || showSettings || showGraphModal || showAddTaskModal || showSummaryModal || showShortLinkModal || showDeleteAllCompletedModal || taskToDelete || taskToComplete) {
+                    document.body.classList.add('body-lock');
+                } else {
+                    document.body.classList.remove('body-lock');
+                }
+            }, [showMobileSidebar, showSettings, showGraphModal, showAddTaskModal, showSummaryModal, showShortLinkModal, showDeleteAllCompletedModal, taskToDelete, taskToComplete]);
+
 
             const handleCloseReleaseNotes = () => {
                 setShowReleaseNotesModal(false);
@@ -2719,7 +2739,7 @@
                     </div>
                     <main className={`flex-grow p-4 flex flex-col md:flex-row gap-4 overflow-hidden transition-all duration-300`}>
                         {/* Left Pane: Task List */}
-                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 no-scroll-chain ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
                             <TaskList
                                 tasks={tasksMatchingActiveFilters}
                                 selectedTaskId={selectedTaskId}
@@ -2742,7 +2762,7 @@
                         </div>
 
                         {/* Right Pane: Task Details */}
-                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto no-scroll-chain ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
                             {selectedProjectName ? (
                                 <div className="space-y-4">
                                     {tasksForProjectView.length > 0 ? (
@@ -3344,11 +3364,11 @@
                         theme: 'dark',
                         securityLevel: 'loose',
                         flowchart: {
-                            useMaxWidth: true, // Allow scaling to fit container width
+                            useMaxWidth: false, // Prevents small graphs from stretching to 100% width
                             htmlLabels: true,
-                            curve: 'basis', // Smoother lines
-                            nodeSpacing: 50,
-                            rankSpacing: 50
+                            curve: 'basis',
+                            nodeSpacing: 45,
+                            rankSpacing: 45
                         }
                     });
 
@@ -3378,14 +3398,11 @@
                         let title = task.title.replace(/["#]/g, '');
                         if (title.length > 25) title = title.substring(0, 22) + '...';
 
-                        // Add project label if available
-                        let label = title;
-                        if (task.project) {
-                            let projectPrefix = task.project.replace(/["#]/g, '');
-                            if (projectPrefix.length > 15) projectPrefix = projectPrefix.substring(0, 12) + '...';
-                            // Using a more compact HTML structure for node boundaries
-                            label = `<div class="taiko-node"><div class="node-title">${title}</div><div class="node-proj">${projectPrefix}</div></div>`;
-                        }
+                        // Standardize label structure for consistent sizing
+                        let projectPrefix = (task.project || 'UNASSIGNED').replace(/["#]/g, '');
+                        if (projectPrefix.length > 15) projectPrefix = projectPrefix.substring(0, 12) + '...';
+
+                        const label = `<div class="taiko-node"><div class="node-title">${title}</div><div class="node-proj">${projectPrefix}</div></div>`;
 
                         graphDefinition += `${safeId}["${label}"]:::${className}\n`;
                         nodes.add(task.id);
