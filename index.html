@@ -152,10 +152,7 @@
 
         /* Prevent scroll chaining and double-scroll on mobile */
         .scroll-container {
-            overscroll-behavior-y: auto;
-            /* Allow natural bounce to reach bottom content */
             -webkit-overflow-scrolling: touch;
-            touch-action: pan-y;
         }
 
         /* Body lock for modals */
@@ -3410,15 +3407,15 @@
                         }
 
                         // Clean and truncate title for readability
-                        let title = task.title.replace(/["#]/g, '');
-                        if (title.length > 20) title = title.substring(0, 17) + '...';
+                        let title = task.title.replace(/["#<>]/g, '');
+                        if (title.length > 18) title = title.substring(0, 15) + '...';
 
-                        // Simple text-based label with project on second line
-                        let projectPrefix = task.project ? task.project.replace(/["#]/g, '') : 'Unassigned';
-                        if (projectPrefix.length > 18) projectPrefix = projectPrefix.substring(0, 15) + '...';
+                        // Get project name
+                        let project = task.project ? task.project.replace(/["#<>]/g, '') : 'Unassigned';
+                        if (project.length > 15) project = project.substring(0, 12) + '...';
 
-                        // Use plain text with escaped newline - Mermaid handles this natively
-                        const label = `${title}\\n${projectPrefix}`;
+                        // Use HTML br tag for line break - Mermaid supports this with htmlLabels: true
+                        const label = `${title}<br/><small>${project}</small>`;
 
                         graphDefinition += `${safeId}["${label}"]:::${className}\n`;
                         nodes.add(task.id);
