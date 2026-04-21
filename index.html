@@ -1690,6 +1690,15 @@
             const completedSubtasks = task.checklist?.filter(s => s.completed).length || 0;
             const progressPercent   = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
+            const ageDays = (!isDone && task.createdAt)
+                ? Math.floor((Date.now() - new Date(task.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                : null;
+            const stalenessBadge = ageDays === null ? null
+                : ageDays >= 14 ? { label: '14d+', cls: 'text-red-400 bg-red-500/10 border border-red-500/30 animate-pulse' }
+                : ageDays >= 7  ? { label: `${ageDays}d`, cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/30' }
+                : ageDays >= 3  ? { label: `${ageDays}d`, cls: 'text-slate-500 bg-slate-700/30 border border-slate-600/30' }
+                : null;
+
             const dueDateClass = useMemo(() => {
                 if (!task.dueDate || isDone) return 'bg-slate-700/50 text-slate-300 border-slate-600';
                 const d = Math.ceil((new Date(task.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
@@ -1745,6 +1754,11 @@
                                 {(task.tags || []).map(tag => (
                                     <span key={tag} className={`font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${getTagColor(tag)}`}>{tag}</span>
                                 ))}
+                                {stalenessBadge && (
+                                    <span className={`font-semibold px-1.5 py-0.5 rounded-full text-[9px] whitespace-nowrap ${stalenessBadge.cls}`}>
+                                        {stalenessBadge.label}
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <span className={`font-bold px-2 py-0.5 rounded-full border ${priorityCfg.color} ${priorityCfg.bgColor} ${priorityCfg.borderColor} flex-shrink-0 text-xs self-center`}>
