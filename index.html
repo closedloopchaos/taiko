@@ -2205,17 +2205,105 @@
 
         const SettingsModal = ({ settings, onSettingsChange, onClose }) => {
             const { exportData, initiateImport } = useAppContext();
+            const [showCustomPicker, setShowCustomPicker] = useState(false);
+
+            const setTheme = (name) => onSettingsChange(p => ({ ...p, theme: name }));
+            const setFont  = (name) => onSettingsChange(p => ({ ...p, font: name }));
+            const setCustomColor = (key, val) => onSettingsChange(p => ({
+                ...p,
+                theme: 'custom',
+                customTheme: { ...(p.customTheme || {}), [key]: val }
+            }));
+
+            const themeEntries = Object.entries(THEMES);
+            const fontEntries  = Object.entries(FONTS);
+
             return (
                 <ModalShell title="Interface Settings" onClose={onClose} maxWidth="max-w-xl">
                     <div className="space-y-8">
-                        <div className="flex items-center justify-between">
+
+                        {/* Appearance */}
+                        <div className="space-y-6">
+                            <h4 className="text-lg font-bold text-slate-200">Appearance</h4>
+
+                            {/* Theme presets */}
+                            <div className="space-y-2">
+                                <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Color Theme</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {themeEntries.map(([name, t]) => {
+                                        const isActive = settings.theme === name;
+                                        return (
+                                            <button key={name} onClick={() => setTheme(name)}
+                                                title={name.charAt(0).toUpperCase() + name.slice(1)}
+                                                className={`flex flex-col items-center gap-1.5 p-1 rounded-lg transition-all ${isActive ? 'ring-2 ring-sky-400' : 'ring-1 ring-slate-600 hover:ring-slate-400'}`}>
+                                                <div className="w-10 h-10 rounded-md border border-white/10 overflow-hidden flex"
+                                                     style={{ background: t.bg }}>
+                                                    <div className="flex-1" style={{ background: t.surface }} />
+                                                    <div className="w-3" style={{ background: t.surface2 }} />
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 capitalize">{name}</span>
+                                            </button>
+                                        );
+                                    })}
+                                    {/* Custom swatch */}
+                                    <button onClick={() => { setShowCustomPicker(p => !p); if (settings.theme !== 'custom') setTheme('custom'); }}
+                                        className={`flex flex-col items-center gap-1.5 p-1 rounded-lg transition-all ${settings.theme === 'custom' ? 'ring-2 ring-sky-400' : 'ring-1 ring-slate-600 hover:ring-slate-400'}`}>
+                                        <div className="w-10 h-10 rounded-md border border-white/10 flex items-center justify-center bg-slate-700 text-slate-400 text-xs font-bold">+</div>
+                                        <span className="text-[10px] text-slate-400">Custom</span>
+                                    </button>
+                                </div>
+
+                                {/* Custom color picker */}
+                                {showCustomPicker && (
+                                    <div className="flex flex-wrap gap-4 pt-2 pl-1">
+                                        {[
+                                            { key: 'bg',      label: 'Background' },
+                                            { key: 'surface', label: 'Surface' },
+                                            { key: 'accent',  label: 'Accent' },
+                                        ].map(({ key, label }) => (
+                                            <label key={key} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                                                <input type="color"
+                                                    value={settings.customTheme?.[key] || '#0f172a'}
+                                                    onChange={e => setCustomColor(key, e.target.value)}
+                                                    className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent"
+                                                />
+                                                {label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Font picker */}
+                            <div className="space-y-2">
+                                <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Font</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {fontEntries.map(([name, f]) => {
+                                        const isActive = (settings.font || 'inter') === name;
+                                        const label = name === 'space-grotesk' ? 'Space Grotesk' : name === 'dm-sans' ? 'DM Sans' : name === 'jetbrains' ? 'JetBrains Mono' : name.charAt(0).toUpperCase() + name.slice(1);
+                                        return (
+                                            <button key={name} onClick={() => setFont(name)}
+                                                style={{ fontFamily: f.family }}
+                                                className={`px-3 py-2 rounded-lg text-sm transition-all ${isActive ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-400' : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'}`}>
+                                                {label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Confirm on delete toggle */}
+                        <div className="pt-6 border-t border-slate-700/50 flex items-center justify-between">
                             <label className="text-lg text-slate-200 font-semibold">Confirm on Delete</label>
                             <button onClick={() => onSettingsChange(p => ({ ...p, confirmOnDelete: !p.confirmOnDelete }))} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${settings.confirmOnDelete ? 'bg-sky-500' : 'bg-slate-600'}`}>
                                 <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${settings.confirmOnDelete ? 'translate-x-6' : 'translate-x-1'}`} />
                             </button>
                         </div>
+
+                        {/* Data & Portability */}
                         <div className="pt-6 border-t border-slate-700/50 space-y-4">
-                            <h4 className="text-lg font-bold text-slate-200">Data & Portability</h4>
+                            <h4 className="text-lg font-bold text-slate-200">Data &amp; Portability</h4>
                             <p className="text-xs text-slate-400">Download a backup of your tasks and settings, or restore from a previous export.</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <button onClick={exportData} className="flex items-center justify-center p-3 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all gap-2">
@@ -2234,6 +2322,7 @@
                                 </label>
                             </div>
                         </div>
+
                     </div>
                 </ModalShell>
             );
