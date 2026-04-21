@@ -2070,6 +2070,122 @@
         });
 
 
+        // ─── FocusPanel ──────────────────────────────────────────────────────────────
+
+        const FocusPanel = ({ task, onExit }) => {
+            const { updateTask } = useAppContext();
+            const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+            // Start timer and play entry sound
+            useEffect(() => {
+                playTaiko('DON', 0.3);
+                const id = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+                return () => clearInterval(id);
+            }, []);
+
+            // Capture elapsedSeconds in a ref to avoid stale closure in ESC handler
+            const elapsedRef = useRef(0);
+            useEffect(() => { elapsedRef.current = elapsedSeconds; }, [elapsedSeconds]);
+
+            const handleExit = useCallback(() => {
+                const elapsed = elapsedRef.current;
+                playTaiko('KA', 0.25);
+                if (elapsed > 0) {
+                    updateTask(task.id, { timeSpentSeconds: (task.timeSpentSeconds || 0) + elapsed });
+                }
+                onExit();
+            }, [task.id, task.timeSpentSeconds, updateTask, onExit]);
+
+            // ESC key to exit
+            useEffect(() => {
+                const handler = (e) => { if (e.key === 'Escape') handleExit(); };
+                window.addEventListener('keydown', handler);
+                return () => window.removeEventListener('keydown', handler);
+            }, [handleExit]);
+
+            const pColor = PRIORITY_HEX[task.priority] || PRIORITY_HEX[null];
+
+            // Timer display
+            const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+            const secs = String(elapsedSeconds % 60).padStart(2, '0');
+
+            // Tick marks: 1 tick per 10s, row of 6, then reset with minute counter
+            const totalTicks      = Math.floor(elapsedSeconds / 10);
+            const currentRowTicks = totalTicks % 6;
+            const completedMinutes = Math.floor(totalTicks / 6);
+
+            // Bracket pulse: interpolated opacity on 3s cycle
+            const [bracketOpacity, setBracketOpacity] = useState(0.3);
+            useEffect(() => {
+                let ascending = true;
+                const id = setInterval(() => {
+                    setBracketOpacity(prev => {
+                        const next = ascending ? prev + 0.015 : prev - 0.015;
+                        if (next >= 0.55) ascending = false;
+                        if (next <= 0.25) ascending = true;
+                        return Math.max(0.25, Math.min(0.55, next));
+                    });
+                }, 50);
+                return () => clearInterval(id);
+            }, []);
+
+            const cornerStyle = { position: 'absolute', pointerEvents: 'none', opacity: bracketOpacity };
+            const bracketPath = "M14,2 L2,2 L2,14";
+
+            return (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3 relative p-6 overflow-hidden">
+                    {/* Corner brackets */}
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ ...cornerStyle, top: 12, left: 12 }}>
+                        <path d={bracketPath} fill="none" stroke={pColor} strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ ...cornerStyle, top: 12, right: 12, transform: 'scaleX(-1)' }}>
+                        <path d={bracketPath} fill="none" stroke={pColor} strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ ...cornerStyle, bottom: 12, left: 12, transform: 'scaleY(-1)' }}>
+                        <path d={bracketPath} fill="none" stroke={pColor} strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ ...cornerStyle, bottom: 12, right: 12, transform: 'scale(-1)' }}>
+                        <path d={bracketPath} fill="none" stroke={pColor} strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+
+                    {/* Tick marks along top edge */}
+                    <div style={{ position: 'absolute', top: 14, left: 36, right: 36, height: 10, display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
+                        {completedMinutes > 0 && (
+                            <span style={{ fontSize: 8, color: pColor, opacity: 0.5, marginRight: 2, fontWeight: 600 }}>{completedMinutes}m</span>
+                        )}
+                        {Array.from({ length: currentRowTicks }, (_, i) => (
+                            <div key={i} style={{ width: 1.5, height: 8, background: pColor, opacity: 0.65, borderRadius: 1, flexShrink: 0 }} />
+                        ))}
+                    </div>
+
+                    {/* Close button */}
+                    <button onClick={handleExit} style={{ position: 'absolute', top: 10, right: 10, color: '#475569', fontSize: 18, lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 4, zIndex: 2 }}>×</button>
+
+                    {/* Content */}
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: pColor, opacity: 0.7 }}>Focusing</span>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textAlign: 'center', maxWidth: 200, lineHeight: 1.4 }}>{task.title}</div>
+                    <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: 3, color: '#f1f5f9', fontVariantNumeric: 'tabular-nums', lineHeight: 1, textShadow: `0 0 20px ${pColor}40` }}>
+                        {mins}:{secs}
+                    </div>
+
+                    {/* Checklist (interactive display) */}
+                    {task.checklist && task.checklist.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, maxWidth: 200, width: '100%' }}>
+                            {task.checklist.map(item => (
+                                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+                                    <div style={{ width: 10, height: 10, border: `1.5px solid ${item.completed ? '#22c55e' : '#475569'}`, borderRadius: 2, flexShrink: 0, background: item.completed ? 'rgba(34,197,94,0.15)' : 'transparent' }} />
+                                    <span style={{ color: item.completed ? '#475569' : '#94a3b8', textDecoration: item.completed ? 'line-through' : 'none' }}>{item.text}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* ESC hint */}
+                    <div style={{ position: 'absolute', bottom: 14, fontSize: 9, color: '#334155', letterSpacing: '0.5px' }}>ESC to exit</div>
+                </div>
+            );
+        };
+
         // ─── 14. FOOTER ───────────────────────────────────────────────────────
 
         const Footer = React.memo(({ onShowReleaseNotes }) => {
