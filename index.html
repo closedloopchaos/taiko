@@ -211,6 +211,29 @@
             null:                { title: "Unprioritized", color: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-600", pulseClass: 'pulse-border-default' }
         };
 
+        const PRIORITY_HEX = {
+            [PRIORITIES.HIGH]:   '#f87171',
+            [PRIORITIES.MEDIUM]: '#fbbf24',
+            [PRIORITIES.LOW]:    '#38bdf8',
+            null:                '#94a3b8',
+        };
+
+        const THEMES = {
+            slate:  { bg: '#0f172a', surface: '#1e293b', surface2: '#273346', border: '#334155', textPrimary: '#f1f5f9', textMuted: '#94a3b8' },
+            void:   { bg: '#050505', surface: '#111111', surface2: '#1a1a1a', border: '#222222', textPrimary: '#f1f5f9', textMuted: '#9ca3af' },
+            ember:  { bg: '#120a06', surface: '#1c1008', surface2: '#2d1a0a', border: '#3d2510', textPrimary: '#fef3c7', textMuted: '#d97706' },
+            forest: { bg: '#061209', surface: '#0d1f12', surface2: '#1a3320', border: '#1f4a27', textPrimary: '#f0fdf4', textMuted: '#86efac' },
+            aurora: { bg: '#08091a', surface: '#12133a', surface2: '#1e1f5e', border: '#2d2f7a', textPrimary: '#f5f3ff', textMuted: '#a78bfa' },
+        };
+
+        const FONTS = {
+            inter:           { family: "'Inter', ui-sans-serif, system-ui", googleUrl: null },
+            jetbrains:       { family: "'JetBrains Mono', monospace",       googleUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap' },
+            'space-grotesk': { family: "'Space Grotesk', sans-serif",       googleUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap' },
+            'dm-sans':       { family: "'DM Sans', sans-serif",             googleUrl: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap' },
+            sora:            { family: "'Sora', sans-serif",                googleUrl: 'https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap' },
+        };
+
         const PRIORITY_TITLE_TO_CONSTANT_MAP = Object.fromEntries(
             Object.values(PRIORITIES).map(p => [PRIORITY_CONFIG[p]?.title, p]).filter(([t]) => t)
         );
@@ -420,7 +443,7 @@
         // Standard modal shell: backdrop + card + header + scrollable body
         const ModalShell = ({ title, onClose, children, maxWidth = 'max-w-lg', headerActions }) => (
             <Modal onClose={onClose}>
-                <div className={`bg-slate-800 rounded-xl shadow-2xl w-full ${maxWidth} flex flex-col max-h-[90vh]`} onClick={e => e.stopPropagation()}>
+                <div className={`rounded-xl shadow-2xl w-full ${maxWidth} flex flex-col max-h-[90vh]`} style={{ background: 'var(--surface)', border: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center p-5 border-b border-slate-700 flex-shrink-0">
                         <h3 className="text-xl font-bold text-white">{title}</h3>
                         <div className="flex items-center gap-2">
@@ -551,7 +574,12 @@
                 const savedTasks = localStorage.getItem(`${appId}-tasks`);
                 if (savedTasks) try { setTasks(JSON.parse(savedTasks)); } catch { console.error("Could not parse saved tasks."); }
 
-                const defaultSettings = { confirmOnDelete: true };
+                const defaultSettings = {
+                    confirmOnDelete: true,
+                    theme: 'slate',
+                    font: 'inter',
+                    customTheme: { bg: '#0f172a', surface: '#1e293b', accent: '#f87171' },
+                };
                 const savedSettings = localStorage.getItem(`${appId}-settings`);
                 if (savedSettings) {
                     try { setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) }); }
@@ -579,6 +607,50 @@
                 const savedSelected = localStorage.getItem(`${appId}-selectedTaskId`);
                 if (savedSelected) try { setSelectedTaskId(JSON.parse(savedSelected)); } catch { setSelectedTaskId(null); }
             }, [appId]);
+
+            // Inject theme CSS vars and font whenever settings change
+            useEffect(() => {
+                const themeName = settings.theme || 'slate';
+                const fontName  = settings.font  || 'inter';
+                const t = themeName === 'custom'
+                    ? {
+                        bg:          settings.customTheme?.bg      || '#0f172a',
+                        surface:     settings.customTheme?.surface || '#1e293b',
+                        surface2:    settings.customTheme?.surface || '#273346',
+                        border:      settings.customTheme?.surface || '#334155',
+                        textPrimary: '#f1f5f9',
+                        textMuted:   '#94a3b8',
+                      }
+                    : (THEMES[themeName] || THEMES.slate);
+                const f = FONTS[fontName] || FONTS.inter;
+
+                // Load Google Font if needed
+                if (f.googleUrl && !document.querySelector(`link[href="${f.googleUrl}"]`)) {
+                    const link = document.createElement('link');
+                    link.rel  = 'stylesheet';
+                    link.href = f.googleUrl;
+                    document.head.appendChild(link);
+                }
+
+                let styleEl = document.getElementById('taiko-theme');
+                if (!styleEl) {
+                    styleEl = document.createElement('style');
+                    styleEl.id = 'taiko-theme';
+                    document.head.appendChild(styleEl);
+                }
+                styleEl.textContent = `
+                    :root {
+                        --bg: ${t.bg};
+                        --surface: ${t.surface};
+                        --surface-2: ${t.surface2};
+                        --border: ${t.border};
+                        --text-primary: ${t.textPrimary};
+                        --text-muted: ${t.textMuted};
+                        --font-family: ${f.family};
+                    }
+                    html, body { background-color: var(--bg) !important; font-family: var(--font-family) !important; }
+                `;
+            }, [settings.theme, settings.font, settings.customTheme]);
 
             // --- Persist to localStorage ---
             useEffect(() => {
