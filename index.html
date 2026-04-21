@@ -138,9 +138,17 @@
 
         // ─── 1. CONSTANTS ────────────────────────────────────────────────────
 
-        const CURRENT_APP_VERSION = '1.6.0';
+        const CURRENT_APP_VERSION = '1.7.0';
 
         const RELEASE_NOTES = {
+            '1.7.0': {
+                title: "Version 1.7.0",
+                notes: [
+                    { title: "🎯 Focus Mode", description: "Enter an immersive single-task view from the header. A reticle timer tracks your session and automatically logs time to the task on exit. Press ESC or click × to leave." },
+                    { title: "⏳ Staleness Indicators", description: "Tasks that haven't moved in a while now show age badges (3d / 7d / 14d+) in the task list, so nothing falls through the cracks." },
+                    { title: "🎨 Theme & Font System", description: "Choose from 5 color themes (Slate, Void, Ember, Forest, Aurora) or build a custom palette. Pick from 5 fonts in Settings → Appearance." },
+                ]
+            },
             '1.0.0': {
                 title: "Version 1.0.0",
                 notes: [{ title: "🚀 Initial Launch", description: "The first version of Taiko is here! A simple, clean, and effective task manager designed to help you focus." }]
