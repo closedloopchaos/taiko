@@ -2083,18 +2083,20 @@
                 return () => clearInterval(id);
             }, []);
 
-            // Capture elapsedSeconds in a ref to avoid stale closure in ESC handler
+            // Refs to avoid stale closures in exit handler
             const elapsedRef = useRef(0);
             useEffect(() => { elapsedRef.current = elapsedSeconds; }, [elapsedSeconds]);
+            const taskRef = useRef(task);
+            useEffect(() => { taskRef.current = task; }, [task]);
 
             const handleExit = useCallback(() => {
                 const elapsed = elapsedRef.current;
                 playTaiko('KA', 0.25);
                 if (elapsed > 0) {
-                    updateTask(task.id, { timeSpentSeconds: (task.timeSpentSeconds || 0) + elapsed });
+                    updateTask(taskRef.current.id, { timeSpentSeconds: (taskRef.current.timeSpentSeconds || 0) + elapsed });
                 }
                 onExit();
-            }, [task.id, task.timeSpentSeconds, updateTask, onExit]);
+            }, [updateTask, onExit]);
 
             // ESC key to exit
             useEffect(() => {
