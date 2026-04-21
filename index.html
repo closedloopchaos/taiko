@@ -2861,7 +2861,7 @@
             const handleCloseReleaseNotes  = () => { setShowReleaseNotes(false); localStorage.setItem('taiko-app-local-lastSeenVersion', CURRENT_APP_VERSION); };
 
             return (
-                <div className="h-[100dvh] w-screen font-sans flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
+                <div className="h-[100dvh] w-screen flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
                     {/* Modals */}
                     {taskToDelete      && <DeleteConfirmationModal onConfirm={handleConfirmDelete} onCancel={() => setTaskToDelete(null)} />}
                     {taskToComplete    && <CompleteConfirmationModal onConfirm={handleConfirmComplete} onCancel={() => setTaskToComplete(null)} taskTitle={taskToComplete.title} />}
