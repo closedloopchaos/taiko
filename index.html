@@ -2109,6 +2109,9 @@
                 return () => window.removeEventListener('keydown', handler);
             }, [handleExit]);
 
+            // Guard: task may have been deleted while focus mode was active
+            if (!task) { onExit(); return null; }
+
             const pColor = PRIORITY_HEX[task.priority] || PRIORITY_HEX[null];
 
             // Timer display
@@ -2805,6 +2808,8 @@
                 setFocusTaskId(null);
             }, []);
 
+            const focusedTask = focusMode ? tasks.find(t => t.id === focusTaskId) : null;
+
             const handleConfirmDelete = useCallback(() => {
                 if (!taskToDelete) return;
                 deleteTask(taskToDelete);
@@ -2967,9 +2972,9 @@
 
                         {/* Detail pane */}
                         <div className={`w-full md:w-2/3 flex-grow overflow-y-auto scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}
-                             style={focusMode ? { borderLeft: `1px solid ${PRIORITY_HEX[tasks.find(t => t.id === focusTaskId)?.priority] || '#94a3b8'}40` } : {}}>
-                            {focusMode && focusTaskId ? (
-                                <FocusPanel task={tasks.find(t => t.id === focusTaskId)} onExit={exitFocus} />
+                             style={focusMode ? { borderLeft: `1px solid ${PRIORITY_HEX[focusedTask?.priority] || '#94a3b8'}40` } : {}}>
+                            {focusMode && focusedTask ? (
+                                <FocusPanel task={focusedTask} onExit={exitFocus} />
                             ) : selectedProjectName ? (
                                 <div className="space-y-4">
                                     {tasksForProjectView.length > 0
