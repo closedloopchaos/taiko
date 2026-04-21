@@ -2053,10 +2053,14 @@
             );
         });
 
-        const HeaderToolbar = React.memo(({ isSmallScreen, onShowSettings, onGenerateSummary, onShowDeleteAllModal, showDeleteAllButton, onGenerateShortLink, onShowGraph }) => {
+        const HeaderToolbar = React.memo(({ isSmallScreen, onShowSettings, onGenerateSummary, onShowDeleteAllModal, showDeleteAllButton, onGenerateShortLink, onShowGraph, onEnterFocus }) => {
             if (isSmallScreen) return null;
             return (
                 <div className="flex items-center flex-wrap gap-2">
+                    <button onClick={onEnterFocus} title="Focus Mode" className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50 rounded-full transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    </button>
+                    <div className="h-6 w-px bg-slate-700/50 mx-1" />
                     <button onClick={onShowGraph} title="View Dependency Graph (Kodō)" className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800/50 rounded-full transition-all">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
                     </button>
@@ -2689,6 +2693,8 @@
             const [showAddTaskModal,  setShowAddTaskModal]   = useState(false);
             const [showShortLinkModal, setShowShortLinkModal] = useState(false);
             const [shortLinkUrl,      setShortLinkUrl]       = useState('');
+            const [focusMode,   setFocusMode]   = useState(false);
+            const [focusTaskId, setFocusTaskId] = useState(null);
             const now         = useNow(60000);
             const windowWidth = useWindowWidth();
 
@@ -2784,6 +2790,20 @@
                 return tasks.filter(t => (t.project || 'Unassigned') === selectedProjectName && t.status !== TASK_STATUS.DONE)
                     .sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority));
             }, [tasks, selectedProjectName]);
+
+            const enterFocus = useCallback(() => {
+                const taskId = selectedTaskId
+                    || tasks.filter(t => t.status !== TASK_STATUS.DONE)
+                             .sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority))[0]?.id;
+                if (!taskId) return;
+                setFocusTaskId(taskId);
+                setFocusMode(true);
+            }, [selectedTaskId, tasks]);
+
+            const exitFocus = useCallback(() => {
+                setFocusMode(false);
+                setFocusTaskId(null);
+            }, []);
 
             const handleConfirmDelete = useCallback(() => {
                 if (!taskToDelete) return;
@@ -2904,6 +2924,7 @@
                                     showDeleteAllButton={completedTasksCount > 0}
                                     onGenerateShortLink={handleGenerateShortLink}
                                     onShowGraph={() => setShowGraphModal(true)}
+                                    onEnterFocus={enterFocus}
                                 />
                             </div>
                         </div>
@@ -2927,7 +2948,7 @@
                     {/* Main content */}
                     <main className="flex-grow p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
                         {/* Task list pane */}
-                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''}`}>
+                        <div className={`w-full md:w-1/3 flex-shrink-0 overflow-y-auto pr-2 scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showDetailViewOnMobile ? 'hidden' : ''} ${focusMode ? 'opacity-[0.13] pointer-events-none select-none' : ''} transition-opacity duration-300`}>
                             <TaskList
                                 tasks={tasksMatchingActiveFilters}
                                 selectedTaskId={selectedTaskId}
@@ -2945,8 +2966,11 @@
                         </div>
 
                         {/* Detail pane */}
-                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}>
-                            {selectedProjectName ? (
+                        <div className={`w-full md:w-2/3 flex-grow overflow-y-auto scroll-container ${isSmallScreen ? 'mobile-scroll-padding' : ''} ${showListViewOnMobile ? 'hidden' : ''}`}
+                             style={focusMode ? { borderLeft: `1px solid ${PRIORITY_HEX[tasks.find(t => t.id === focusTaskId)?.priority] || '#94a3b8'}40` } : {}}>
+                            {focusMode && focusTaskId ? (
+                                <FocusPanel task={tasks.find(t => t.id === focusTaskId)} onExit={exitFocus} />
+                            ) : selectedProjectName ? (
                                 <div className="space-y-4">
                                     {tasksForProjectView.length > 0
                                         ? tasksForProjectView.map(task =>
