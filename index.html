@@ -655,6 +655,9 @@
                     styleEl.id = 'taiko-theme';
                     document.head.appendChild(styleEl);
                 }
+                const accent = themeName === 'custom'
+                    ? (settings.customTheme?.accent || '#f87171')
+                    : '#f87171';
                 styleEl.textContent = `
                     :root {
                         --bg: ${t.bg};
@@ -663,6 +666,7 @@
                         --border: ${t.border};
                         --text-primary: ${t.textPrimary};
                         --text-muted: ${t.textMuted};
+                        --accent: ${accent};
                         --font-family: ${f.family};
                     }
                     html, body { background-color: var(--bg) !important; font-family: var(--font-family) !important; }
@@ -2803,7 +2807,8 @@
             }, [tasks, selectedProjectName]);
 
             const enterFocus = useCallback(() => {
-                const taskId = selectedTaskId
+                const selectedIsOpen = selectedTaskId && tasks.find(t => t.id === selectedTaskId)?.status !== TASK_STATUS.DONE;
+                const taskId = (selectedIsOpen ? selectedTaskId : null)
                     || tasks.filter(t => t.status !== TASK_STATUS.DONE)
                              .sort((a, b) => getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority))[0]?.id;
                 if (!taskId) return;
